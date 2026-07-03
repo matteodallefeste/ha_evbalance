@@ -7,14 +7,14 @@
         "data": {
           "name": "Name",
           "ev_charger_power_entity": "EV Charger power sensor (W)",
-          "ev_charger_current_entity": "EV Charger current number (A)",
+          "ev_charger_current_entity": "EV Charger current sensor (A)",
           "sources": "Consumption sources",
           "sources_include_ev_charger": "Source already includes the EV Charger (e.g. main meter / grid import)",
           "max_power_w": "Meter maximum limit (W)",
           "voltage": "Line voltage (V)",
           "phases": "Supply",
           "min_current": "Minimum charging current (A)",
-          "max_current": "Maximum EV Charger current (A)"
+          "max_current": "Maximum charging current (A)"
         }
       }
     },
@@ -31,9 +31,9 @@
           "sources_include_ev_charger": "Source already includes the EV Charger (e.g. main meter / grid import)",
           "safety_margin_w": "Safety margin (W)",
           "pause_current": "Pause current (A)",
-          "current_steps": "Allowed current steps (A)",
-          "hold_seconds": "Wait before raising (s)",
-          "update_interval": "Update interval (s)",
+          "current_steps": "Allowed current steps (A) E.g. 6, 8, 10, 13, 16",
+          "hold_seconds": "Wait before raising current (s)",
+          "update_interval": "Consumption measurement update interval (s)",
           "tariff_preset": "Time-of-use tariff",
           "show_panel": "Show panel in the sidebar"
         },

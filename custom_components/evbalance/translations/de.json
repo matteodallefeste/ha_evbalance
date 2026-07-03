@@ -7,14 +7,14 @@
         "data": {
           "name": "Name",
           "ev_charger_power_entity": "EV Charger-Leistungssensor (W)",
-          "ev_charger_current_entity": "EV Charger-Strom (Number-Entität) (A)",
+          "ev_charger_current_entity": "EV Charger-Stromsensor (A)",
           "sources": "Verbrauchsquellen",
           "sources_include_ev_charger": "Quelle enthält die EV Charger bereits (z. B. Hauptzähler / Netzbezug)",
           "max_power_w": "Maximale Zählergrenze (W)",
           "voltage": "Netzspannung (V)",
           "phases": "Versorgung",
           "min_current": "Minimaler Ladestrom (A)",
-          "max_current": "Maximaler EV Charger-Strom (A)"
+          "max_current": "Maximaler Ladestrom (A)"
         }
       }
     },
@@ -31,9 +31,9 @@
           "sources_include_ev_charger": "Quelle enthält die EV Charger bereits (z. B. Hauptzähler / Netzbezug)",
           "safety_margin_w": "Sicherheitsmarge (W)",
           "pause_current": "Pausenstrom (A)",
-          "current_steps": "Zulässige Stromstufen (A)",
-          "hold_seconds": "Wartezeit vor dem Erhöhen (s)",
-          "update_interval": "Aktualisierungsintervall (s)",
+          "current_steps": "Zulässige Stromstufen (A) z. B. 6, 8, 10, 13, 16",
+          "hold_seconds": "Wartezeit vor dem Erhöhen des Stroms (s)",
+          "update_interval": "Aktualisierungsintervall der Verbrauchsmessung (s)",
           "tariff_preset": "Zeitabhängiger Tarif",
           "show_panel": "Panel in der Seitenleiste anzeigen"
         },

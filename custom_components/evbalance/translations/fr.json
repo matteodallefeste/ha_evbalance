@@ -7,14 +7,14 @@
         "data": {
           "name": "Nom",
           "ev_charger_power_entity": "Capteur de puissance de la EV Charger (W)",
-          "ev_charger_current_entity": "Entité number du courant de la EV Charger (A)",
+          "ev_charger_current_entity": "Capteur de courant de la EV Charger (A)",
           "sources": "Sources de consommation",
           "sources_include_ev_charger": "La source inclut déjà la EV Charger (ex. compteur principal / soutirage réseau)",
           "max_power_w": "Limite maximale du compteur (W)",
           "voltage": "Tension de ligne (V)",
           "phases": "Alimentation",
           "min_current": "Courant de charge minimal (A)",
-          "max_current": "Courant maximal de la EV Charger (A)"
+          "max_current": "Courant de charge maximal (A)"
         }
       }
     },
@@ -31,9 +31,9 @@
           "sources_include_ev_charger": "La source inclut déjà la EV Charger (ex. compteur principal / soutirage réseau)",
           "safety_margin_w": "Marge de sécurité (W)",
           "pause_current": "Courant de pause (A)",
-          "current_steps": "Paliers de courant autorisés (A)",
-          "hold_seconds": "Attente avant augmentation (s)",
-          "update_interval": "Intervalle de mise à jour (s)",
+          "current_steps": "Paliers de courant autorisés (A) Ex. 6, 8, 10, 13, 16",
+          "hold_seconds": "Attente avant d'augmenter le courant (s)",
+          "update_interval": "Intervalle de mise à jour de la mesure de consommation (s)",
           "tariff_preset": "Tarif à plages horaires",
           "show_panel": "Afficher le panneau dans la barre latérale"
         },
