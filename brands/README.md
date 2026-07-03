@@ -6,8 +6,8 @@ Immagini pronte per l'integrazione (sfondo verde-energia con fulmine su gauge).
 |---|---|---|
 | `evbalance/icon.png` | 256×256 | icona |
 | `evbalance/icon@2x.png` | 512×512 | icona hi-dpi |
-| `evbalance/logo.png` | 924×256 | wordmark |
-| `evbalance/logo@2x.png` | 1853×512 | wordmark hi-dpi |
+| `evbalance/logo.png` | 512×151 | wordmark |
+| `evbalance/logo@2x.png` | 1024×302 | wordmark hi-dpi |
 
 ## Farle comparire in HACS / Home Assistant
 
