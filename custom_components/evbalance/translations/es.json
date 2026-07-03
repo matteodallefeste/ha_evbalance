@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EV Balance",
+        "description": "Configura el equilibrador de carga para tu EV Charger.",
+        "data": {
+          "name": "Nombre",
+          "ev_charger_power_entity": "Sensor de potencia de la EV Charger (W)",
+          "ev_charger_current_entity": "Entidad number de corriente de la EV Charger (A)",
+          "sources": "Fuentes de consumo",
+          "sources_include_ev_charger": "La fuente ya incluye la EV Charger (p. ej. contador principal / consumo de red)",
+          "max_power_w": "Límite máximo del contador (W)",
+          "voltage": "Tensión de línea (V)",
+          "phases": "Alimentación",
+          "min_current": "Corriente mínima de carga (A)",
+          "max_current": "Corriente máxima de la EV Charger (A)"
+        }
+      }
+    },
+    "error": {
+      "min_ge_max": "La corriente mínima debe ser inferior a la máxima."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Ajustes de EV Balance",
+        "data": {
+          "sources": "Fuentes de consumo",
+          "sources_include_ev_charger": "La fuente ya incluye la EV Charger (p. ej. contador principal / consumo de red)",
+          "safety_margin_w": "Margen de seguridad (W)",
+          "pause_current": "Corriente de pausa (A)",
+          "current_steps": "Pasos de corriente permitidos (A)",
+          "hold_seconds": "Espera antes de subir (s)",
+          "update_interval": "Intervalo de actualización (s)",
+          "tariff_preset": "Tarifa por franjas horarias",
+          "show_panel": "Mostrar el panel en la barra lateral"
+        },
+        "data_description": {
+          "current_steps": "Valores de amperios separados por comas (p. ej. 6, 8, 10, 13, 16). La corriente se redondea hacia abajo al paso permitido más cercano. Déjalo vacío para usar cada entero desde el mínimo al máximo."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "balancing": { "name": "Equilibrado activo" }
+    },
+    "binary_sensor": {
+      "charging_blocked": { "name": "Carga en pausa" }
+    },
+    "sensor": {
+      "total_power": { "name": "Potencia total" },
+      "sources_power": { "name": "Potencia de las fuentes" },
+      "ev_charger_power": { "name": "Potencia de la EV Charger" },
+      "target_current": { "name": "Corriente concedida" },
+      "active_band": { "name": "Franja tarifaria activa" }
+    }
+  }
+}

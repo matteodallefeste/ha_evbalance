@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EV Balance",
+        "description": "Konfiguriere den Lastausgleich für deine EV Charger.",
+        "data": {
+          "name": "Name",
+          "ev_charger_power_entity": "EV Charger-Leistungssensor (W)",
+          "ev_charger_current_entity": "EV Charger-Strom (Number-Entität) (A)",
+          "sources": "Verbrauchsquellen",
+          "sources_include_ev_charger": "Quelle enthält die EV Charger bereits (z. B. Hauptzähler / Netzbezug)",
+          "max_power_w": "Maximale Zählergrenze (W)",
+          "voltage": "Netzspannung (V)",
+          "phases": "Versorgung",
+          "min_current": "Minimaler Ladestrom (A)",
+          "max_current": "Maximaler EV Charger-Strom (A)"
+        }
+      }
+    },
+    "error": {
+      "min_ge_max": "Der minimale Strom muss kleiner als der maximale sein."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "EV Balance-Einstellungen",
+        "data": {
+          "sources": "Verbrauchsquellen",
+          "sources_include_ev_charger": "Quelle enthält die EV Charger bereits (z. B. Hauptzähler / Netzbezug)",
+          "safety_margin_w": "Sicherheitsmarge (W)",
+          "pause_current": "Pausenstrom (A)",
+          "current_steps": "Zulässige Stromstufen (A)",
+          "hold_seconds": "Wartezeit vor dem Erhöhen (s)",
+          "update_interval": "Aktualisierungsintervall (s)",
+          "tariff_preset": "Zeitabhängiger Tarif",
+          "show_panel": "Panel in der Seitenleiste anzeigen"
+        },
+        "data_description": {
+          "current_steps": "Kommagetrennte Ampere-Werte (z. B. 6, 8, 10, 13, 16). Der Strom wird auf die nächstniedrigere zulässige Stufe abgerundet. Leer lassen, um jeden ganzzahligen Wert von Minimum bis Maximum zu verwenden."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "balancing": { "name": "Lastausgleich aktiv" }
+    },
+    "binary_sensor": {
+      "charging_blocked": { "name": "Laden pausiert" }
+    },
+    "sensor": {
+      "total_power": { "name": "Gesamtleistung" },
+      "sources_power": { "name": "Leistung der Quellen" },
+      "ev_charger_power": { "name": "EV Charger-Leistung" },
+      "target_current": { "name": "Gewährter Strom" },
+      "active_band": { "name": "Aktive Tarifzone" }
+    }
+  }
+}

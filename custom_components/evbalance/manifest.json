@@ -1,0 +1,13 @@
+{
+  "domain": "evbalance",
+  "name": "EV Balance",
+  "codeowners": ["@matteodallefeste"],
+  "config_flow": true,
+  "dependencies": ["http", "websocket_api", "panel_custom", "recorder"],
+  "documentation": "https://github.com/matteodallefeste/ha_evbalance",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/matteodallefeste/ha_evbalance/issues",
+  "requirements": [],
+  "version": "26.7.6"
+}

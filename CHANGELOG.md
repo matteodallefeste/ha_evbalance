@@ -1,0 +1,43 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project uses calendar versioning (`YY.M.patch`). The version in
+`custom_components/evbalance/manifest.json` must always match the Git tag and
+the GitHub Release — HACS shows the GitHub Release notes as the changelog to
+users.
+
+## [Unreleased]
+
+## [26.7.3] - 2026-07-02
+
+### Added
+- **Optional sidebar panel** (`/evbalance`). It shows, in real time, the house
+  consumption, the EV Charger consumption, the total, the granted max charge
+  current, the charge state (charging / paused / idle) and the power limit.
+- **Energy-by-tariff-band chart** in the panel, with a *Today* view (hourly
+  granularity) and a *Month* view navigable backwards month by month. Data
+  comes from Home Assistant's native long-term statistics
+  (`recorder/statistics_during_period`) — no custom storage, kept indefinitely.
+- New option **"Show panel in the sidebar"** (on by default) in the integration
+  options.
+
+### Fixed
+- Integration failed to load with `ModuleNotFoundError: No module named
+  'homeassistant.helpers.device_info'`. `DeviceInfo` is now imported from
+  `homeassistant.helpers.entity`.
+
+### Changed
+- Entity icons are now declared in `icons.json` (single source of truth) instead
+  of being hard-coded on each entity.
+- Brand assets moved to `brands/custom_integrations/evbalance/` to match the
+  structure required by the `home-assistant/brands` repository.
+
+## [26.7.2] - 2026-07-02
+
+### Added
+- Initial release: energy load balancer for a EV Charger (HACS custom
+  integration). Reads the meter/house power and the EV Charger power, and modulates
+  the EV Charger current to stay under the meter limit, with time-of-use (ARERA)
+  tariff bands and per-band energy sensors.

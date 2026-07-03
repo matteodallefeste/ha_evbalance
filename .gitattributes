@@ -1,0 +1,5 @@
+# Normalizza i fine riga a LF nel repository
+* text=auto eol=lf
+*.py text eol=lf
+*.json text eol=lf
+*.md text eol=lf

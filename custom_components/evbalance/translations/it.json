@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EV Balance",
+        "description": "Configura il bilanciatore di carico per la EV Charger.",
+        "data": {
+          "name": "Nome",
+          "ev_charger_power_entity": "Sensore potenza EV Charger (W)",
+          "ev_charger_current_entity": "Number corrente EV Charger (A)",
+          "sources": "Sorgenti di consumo",
+          "sources_include_ev_charger": "La sorgente include già la EV Charger (es. contatore/prelievo rete)",
+          "max_power_w": "Limite massimo contatore (W)",
+          "voltage": "Tensione di linea (V)",
+          "phases": "Alimentazione",
+          "min_current": "Corrente minima di ricarica (A)",
+          "max_current": "Corrente massima EV Charger (A)"
+        }
+      }
+    },
+    "error": {
+      "min_ge_max": "La corrente minima deve essere inferiore alla massima."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Impostazioni EV Balance",
+        "data": {
+          "sources": "Sorgenti di consumo",
+          "sources_include_ev_charger": "La sorgente include già la EV Charger (es. contatore/prelievo rete)",
+          "safety_margin_w": "Margine di sicurezza (W)",
+          "pause_current": "Corrente di pausa (A)",
+          "current_steps": "Passi di corrente ammessi (A)",
+          "hold_seconds": "Attesa prima di rialzare (s)",
+          "update_interval": "Intervallo di aggiornamento (s)",
+          "tariff_preset": "Fasce orarie",
+          "show_panel": "Mostra il pannello nella barra laterale"
+        },
+        "data_description": {
+          "current_steps": "Valori di Ampere separati da virgola (es. 6, 8, 10, 13, 16). La corrente viene arrotondata per difetto al passo ammesso. Lascia vuoto per usare ogni intero da minimo a massimo."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "balancing": { "name": "Bilanciamento attivo" }
+    },
+    "binary_sensor": {
+      "charging_blocked": { "name": "Ricarica in pausa" }
+    },
+    "sensor": {
+      "total_power": { "name": "Potenza totale" },
+      "sources_power": { "name": "Potenza sorgenti" },
+      "ev_charger_power": { "name": "Potenza EV Charger" },
+      "target_current": { "name": "Corrente concessa" },
+      "active_band": { "name": "Fascia oraria attiva" }
+    }
+  }
+}

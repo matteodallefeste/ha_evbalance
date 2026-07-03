@@ -1,0 +1,21 @@
+{
+  "entity": {
+    "sensor": {
+      "total_power": { "default": "mdi:flash" },
+      "sources_power": { "default": "mdi:home-lightning-bolt" },
+      "ev_charger_power": { "default": "mdi:ev-station" },
+      "target_current": { "default": "mdi:current-ac" },
+      "active_band": { "default": "mdi:clock-time-four-outline" }
+    },
+    "switch": {
+      "balancing": { "default": "mdi:scale-balance" }
+    },
+    "binary_sensor": {
+      "charging_blocked": { "default": "mdi:ev-station" }
+    },
+    "number": {
+      "max_power": { "default": "mdi:transmission-tower" },
+      "safety_margin": { "default": "mdi:shield-alert" }
+    }
+  }
+}

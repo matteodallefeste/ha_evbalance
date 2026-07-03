@@ -1,0 +1,61 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EV Balance",
+        "description": "Configurez l'équilibreur de charge pour votre EV Charger.",
+        "data": {
+          "name": "Nom",
+          "ev_charger_power_entity": "Capteur de puissance de la EV Charger (W)",
+          "ev_charger_current_entity": "Entité number du courant de la EV Charger (A)",
+          "sources": "Sources de consommation",
+          "sources_include_ev_charger": "La source inclut déjà la EV Charger (ex. compteur principal / soutirage réseau)",
+          "max_power_w": "Limite maximale du compteur (W)",
+          "voltage": "Tension de ligne (V)",
+          "phases": "Alimentation",
+          "min_current": "Courant de charge minimal (A)",
+          "max_current": "Courant maximal de la EV Charger (A)"
+        }
+      }
+    },
+    "error": {
+      "min_ge_max": "Le courant minimal doit être inférieur au maximal."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Paramètres EV Balance",
+        "data": {
+          "sources": "Sources de consommation",
+          "sources_include_ev_charger": "La source inclut déjà la EV Charger (ex. compteur principal / soutirage réseau)",
+          "safety_margin_w": "Marge de sécurité (W)",
+          "pause_current": "Courant de pause (A)",
+          "current_steps": "Paliers de courant autorisés (A)",
+          "hold_seconds": "Attente avant augmentation (s)",
+          "update_interval": "Intervalle de mise à jour (s)",
+          "tariff_preset": "Tarif à plages horaires",
+          "show_panel": "Afficher le panneau dans la barre latérale"
+        },
+        "data_description": {
+          "current_steps": "Valeurs en ampères séparées par des virgules (ex. 6, 8, 10, 13, 16). Le courant est arrondi vers le bas au palier autorisé le plus proche. Laissez vide pour utiliser chaque entier du minimum au maximum."
+        }
+      }
+    }
+  },
+  "entity": {
+    "switch": {
+      "balancing": { "name": "Équilibrage activé" }
+    },
+    "binary_sensor": {
+      "charging_blocked": { "name": "Charge en pause" }
+    },
+    "sensor": {
+      "total_power": { "name": "Puissance totale" },
+      "sources_power": { "name": "Puissance des sources" },
+      "ev_charger_power": { "name": "Puissance de la EV Charger" },
+      "target_current": { "name": "Courant accordé" },
+      "active_band": { "name": "Plage tarifaire active" }
+    }
+  }
+}
