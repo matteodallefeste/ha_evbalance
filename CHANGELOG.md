@@ -10,6 +10,17 @@ users.
 
 ## [Unreleased]
 
+## [26.7.7] - 2026-07-03
+
+First fully working release.
+
+### Fixed
+- Corrected panel and integration translation strings across all supported
+  languages (German, English, Spanish, French, Italian) in both the backend
+  (`strings.json`, `translations/*.json`) and the frontend panel
+  (`evbalance-translations.js`), so labels and options render correctly in every
+  locale.
+
 ## [26.7.3] - 2026-07-02
 
 ### Added
