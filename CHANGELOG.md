@@ -10,6 +10,16 @@ users.
 
 ## [Unreleased]
 
+## [26.7.8] - 2026-07-03
+
+### Added
+- **Bundled brand images** in `custom_components/evbalance/brand/` (`icon.png`,
+  `icon@2x.png`, `logo.png`, `logo@2x.png`). As of Home Assistant 2026.3 a custom
+  integration can ship its own brand images locally and they take priority over
+  the brands CDN, so the icon now shows in the Home Assistant UI without waiting
+  for a `home-assistant/brands` submission. See the
+  [brands proxy API announcement](https://developers.home-assistant.io/blog/2026/02/24/brands-proxy-api/).
+
 ## [26.7.7] - 2026-07-03
 
 First fully working release.
