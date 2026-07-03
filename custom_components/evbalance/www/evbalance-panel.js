@@ -147,7 +147,7 @@ class EVBalancePanel extends HTMLElement {
     };
 
     set("v-house", this._fmtPower(this._numState("sources_power")));
-    set("v-EV Charger", this._fmtPower(this._numState("ev_charger_power")));
+    set("v-evCharger", this._fmtPower(this._numState("ev_charger_power")));
     set("v-total", this._fmtPower(this._numState("total_power")));
 
     const cur = this._numState("target_current");
@@ -354,7 +354,7 @@ class EVBalancePanel extends HTMLElement {
           <h2>${t.live}</h2>
           <div class="tiles">
             <div class="tile"><span class="k">${t.house}</span><span class="val" id="v-house">—</span></div>
-            <div class="tile"><span class="k">${t.EV Charger}</span><span class="val" id="v-EV Charger">—</span></div>
+            <div class="tile"><span class="k">${t.evCharger}</span><span class="val" id="v-evCharger">—</span></div>
             <div class="tile"><span class="k">${t.total}</span><span class="val" id="v-total">—</span></div>
             <div class="tile"><span class="k">${t.maxCurrent}</span><span class="val" id="v-current">—</span></div>
             <div class="tile"><span class="k">${t.powerLimit}</span><span class="val" id="v-limit">—</span></div>
@@ -521,8 +521,8 @@ class EVBalancePanel extends HTMLElement {
         <label class="field wide"><span>${t.fName}</span>
           <input id="cfg-name" type="text" value="${this._esc(c.name || "")}"></label>
 
-        ${this._fieldEntity("ev_charger_power_entity", t.fEV ChargerPower, this._powerSensors())}
-        ${this._fieldEntity("ev_charger_current_entity", t.fEV ChargerCurrent, this._numberEntities())}
+        ${this._fieldEntity("ev_charger_power_entity", t.fEvChargerPower, this._powerSensors())}
+        ${this._fieldEntity("ev_charger_current_entity", t.fEvChargerCurrent, this._numberEntities())}
 
         ${this._fieldSources(t.fSources)}
         <label class="cb-row single wide">

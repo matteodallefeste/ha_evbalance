@@ -55,5 +55,5 @@ PANEL_ICON = "mdi:ev-station"
 # fratello delle traduzioni tramite path relativo, quindi dev'essere raggiungibile.
 PANEL_STATIC_URL = "/evbalance_static"       # URL base (cartella www/)
 PANEL_JS_FILENAME = "evbalance-panel.js"     # modulo principale del pannello
-PANEL_JS_VERSION = "6"                         # bump per invalidare la cache del browser
+PANEL_JS_VERSION = "7"                         # bump per invalidare la cache del browser
 WS_TYPE_PANEL = "evbalance/panel"             # comando websocket usato dal pannello
