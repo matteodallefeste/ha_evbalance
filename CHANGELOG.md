@@ -10,6 +10,14 @@ users.
 
 ## [Unreleased]
 
+## [26.7.9] - 2026-07-03
+
+### Changed
+- Reworked the brand artwork (icon and logo redrawn) and refreshed the bundled
+  images in `custom_components/evbalance/brand/`. The logo is now 512×152
+  (`@2x` 1024×304); the icon stays 256×256 (`@2x` 512×512). Source assets moved
+  to the top-level `brand/` folder.
+
 ## [26.7.8] - 2026-07-03
 
 ### Added
