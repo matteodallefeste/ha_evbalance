@@ -1,104 +1,134 @@
-# EV Balance — Load balancer energetico per Home Assistant
+<p align="center">
+  <img src="brand/logo.png" alt="EV Balance" width="360">
+</p>
 
-Integrazione custom (installabile via **HACS**) che evita il distacco del
-contatore per sovraccarico modulando la corrente della EV Charger in base ai
-consumi di casa, e che tiene traccia dell'energia per **fasce orarie** (ARERA
-F1/F2/F3) con reset giornaliero e mensile.
+<p align="center">
+  <b>English</b> · <a href="README.it.md">Italiano</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a>
+</p>
 
-## Come funziona
+# EV Balance — Energy load balancer for Home Assistant
 
-Ad ogni ciclo (default ogni 15 s) l'integrazione:
+Custom integration (installable via **HACS**) that prevents the meter from
+tripping on overload by modulating the EV Charger current based on household
+consumption, and that tracks energy by **time bands** (Italian ARERA F1/F2/F3)
+with daily and monthly resets.
 
-1. legge la **potenza istantanea** della EV Charger e delle sorgenti configurate;
-2. calcola il budget disponibile:
-   `budget = limite_contatore − margine_sicurezza − consumi_sorgenti`;
-3. converte il budget in Ampere (in base a tensione e n° fasi) e lo scrive
-   sulla **number entity** della EV Charger;
-4. se i consumi non-EV Charger superano il limite, mette la EV Charger **in pausa**.
+## How it works
 
-### Isteresi (anti-flapping)
+On every cycle (default every 3 s) the integration:
 
-- **Riduzione / pausa → immediata** (sicurezza).
-- **Aumento → consentito solo dopo `hold_seconds`** (default 300 s = 5 min)
-  dall'ultima variazione. Così il valore non viene modificato di continuo.
+1. reads the **instantaneous power** of the EV Charger and of the configured sources;
+2. computes the available budget:
+   `budget = meter_limit − safety_margin − source_consumption`;
+3. converts the budget into Amperes (based on voltage and number of phases) and
+   writes it to the EV Charger's **number entity**;
+4. if non-EV-Charger consumption exceeds the limit, it **pauses** the EV Charger.
 
-## Installazione (HACS)
+### Hysteresis (anti-flapping)
+
+- **Reduction / pause → immediate** (safety).
+- **Increase → allowed only after `hold_seconds`** (default 300 s = 5 min)
+  since the last change. This keeps the value from being changed constantly.
+
+## Installation (HACS)
 
 1. HACS → *Integrations* → menu ⋮ → **Custom repositories**.
-2. Aggiungi l'URL di questo repository, categoria **Integration**.
-3. Installa **EV Balance** e riavvia Home Assistant.
-4. *Impostazioni → Dispositivi e servizi → Aggiungi integrazione → EV Balance*.
+2. Add the URL of this repository, category **Integration**.
+3. Install **EV Balance** and restart Home Assistant.
+4. *Settings → Devices & Services → Add Integration → EV Balance*.
 
-> In alternativa, copia la cartella `custom_components/evbalance/` dentro la
-> tua cartella `config/custom_components/` e riavvia.
+> Alternatively, copy the `custom_components/evbalance/` folder into your
+> `config/custom_components/` folder and restart.
 
-## Configurazione
+## Configuration
 
-**Setup iniziale:**
+**Initial setup (structural, set at first configuration):**
 
-| Campo | Descrizione |
+| Parameter | Default | What it's for |
+|---|---|---|
+| Name | EV Balance | Name of the integration instance |
+| EV Charger power sensor | — | `sensor.*` (device_class power) in W/kW with the current EV Charger power |
+| EV Charger current number | — | `number.*` entity the balancer writes the max Amperes to |
+| Consumption sources | (none) | Power sensors of the rest of the house, subtracted from the budget (multi-select) |
+| Source includes EV Charger | off | ON if a selected source already measures the EV Charger too, so it isn't counted twice |
+| Meter maximum limit | 3300 W | Power above which the meter trips; the ceiling the balancer stays under |
+| Voltage | 230 V | Line voltage, used to convert Watts ↔ Amperes |
+| Supply / Phases | Single-phase | Single-phase (1) or three-phase (3), affects the W↔A conversion |
+| Min current | 6 A | Below this the EV Charger is paused instead of throttled |
+| Max current | 16 A | Highest current that can be written to the EV Charger |
+
+**Options (hot-editable, no restart):**
+
+| Parameter | Default | What it's for |
+|---|---|---|
+| Consumption sources | (none) | Same as above, editable later |
+| Source includes EV Charger | off | Same as above, editable later |
+| Safety margin | 200 W | Reserve kept free under the meter limit, absorbs spikes |
+| Pause current | 0 A | Value written to "stop" charging when paused (some chargers need a value > 0) |
+| Allowed current steps | (empty) | Comma-separated list of allowed Amperes (e.g. `6, 8, 10, 16`); empty = every integer from min to max |
+| Hold seconds | 300 s | Minimum wait before the current can be raised again (anti-flapping) |
+| Update interval | 3 s | How often power is read and current applied (minimum 3 s) |
+| Tariff preset | ARERA F1/F2/F3 | Time-band set for energy tracking (ARERA or single flat band) |
+| Show panel | on | Show/hide the EV Balance panel in the sidebar |
+
+## Created entities
+
+- **Switch** *Balancing active* — when OFF it reads but does not touch the EV Charger.
+- **Binary sensor** *Charging paused* — with the `reasons` attribute (explains the decision).
+- **Number** *Meter maximum limit*, *Safety margin* — live tuning.
+- **Sensor** total/sources/EV-Charger power, *Allowed current*, *Active band*.
+- **Energy sensor** for each source × band × period (daily + monthly), in kWh,
+  `state_class: total_increasing` → compatible with the Energy dashboard.
+
+## Sidebar panel
+
+The integration registers an optional **sidebar panel** (custom element, no
+build step) showing live power, allowed current, meter limit and the per-band
+energy of the last months. It reads everything from existing entities and the
+Recorder long-term statistics — no extra storage. Toggle it from the options
+(*Show panel*).
+
+## ARERA time bands
+
+| Band | When |
 |---|---|
-| Sensore potenza EV Charger | `sensor.*` in W (o kW) con la potenza attuale della EV Charger |
-| Number corrente EV Charger | `number.*` su cui scrivere gli Ampere massimi |
-| Limite massimo contatore | Potenza oltre cui il contatore stacca (es. 3300, 6000) |
-| Tensione / Alimentazione | 230V monofase oppure 400V trifase |
-| Corrente min / max | Range ammesso dalla EV Charger (es. 6–16 A) |
+| **F1** | Mon–Fri 08:00–19:00 |
+| **F2** | Mon–Fri 07:00–08:00 and 19:00–23:00; Sat 07:00–23:00 |
+| **F3** | Mon–Fri 23:00–07:00; Sat 23:00–07:00; Sundays and holidays |
 
-**Opzioni (modificabili a caldo):** sorgenti di consumo (multi-select di
-sensori di potenza), margine di sicurezza, corrente di pausa, `hold_seconds`,
-intervallo di aggiornamento, preset fasce (ARERA / fascia unica).
+The bands are data-driven ([`energy.py`](custom_components/evbalance/energy.py)):
+adding a custom preset means adding rules, without touching the logic.
 
-## Entità create
+## Development
 
-- **Switch** *Bilanciamento attivo* — se OFF legge ma non tocca la EV Charger.
-- **Binary sensor** *Ricarica in pausa* — con l'attributo `reasons` (spiega la decisione).
-- **Number** *Limite massimo contatore*, *Margine di sicurezza* — tuning live.
-- **Sensor** potenza totale/sorgenti/EV Charger, *Corrente concessa*, *Fascia attiva*.
-- **Sensor energia** per ogni sorgente × fascia × periodo (giornaliero + mensile),
-  in kWh, `state_class: total_increasing` → compatibili con la dashboard Energia.
-
-## Fasce orarie ARERA
-
-| Fascia | Quando |
-|---|---|
-| **F1** | Lun–Ven 08:00–19:00 |
-| **F2** | Lun–Ven 07:00–08:00 e 19:00–23:00; Sab 07:00–23:00 |
-| **F3** | Lun–Ven 23:00–07:00; Sab 23:00–07:00; Domenica e festivi |
-
-Le fasce sono data-driven ([`energy.py`](custom_components/evbalance/energy.py)):
-aggiungere un preset custom significa aggiungere regole, senza toccare la logica.
-
-## Sviluppo
-
-La logica di bilanciamento è isolata e testabile in
-[`balancer.py`](custom_components/evbalance/balancer.py) (nessuna dipendenza da
+The balancing logic is isolated and testable in
+[`balancer.py`](custom_components/evbalance/balancer.py) (no dependency on
 Home Assistant).
 
-## ⚠️ Sicurezza
+## ⚠️ Safety
 
-Questo software modula la corrente ma **non sostituisce le protezioni
-elettriche** dell'impianto. Imposta sempre un margine di sicurezza adeguato e
-verifica il comportamento della tua EV Charger quando riceve corrente 0 A.
+This software modulates the current but **does not replace the electrical
+protections** of your installation. Always set an adequate safety margin and
+verify how your EV Charger behaves when it receives 0 A.
 
 ### ⚠️ Disclaimer
 
-L'uso dell'applicazione e il settaggio dei parametri **dovrebbero essere
-effettuati esclusivamente da persone autorizzate ed esperte**. L'autore declina
-ogni responsabilità riguardo possibili danni causati a cose e persone, in modo
-diretto o indiretto, derivanti dall'uso di questo software.
+Using the application and setting its parameters **should be done exclusively
+by authorized and expert people**. The author declines any responsibility for
+possible damage to property and people, directly or indirectly, arising from
+the use of this software.
 
-## Licenza
+## License
 
-Source-available sotto **PolyForm Noncommercial License 1.0.0** con termini
-aggiuntivi — vedi [`LICENSE`](LICENSE).
+Source-available under the **PolyForm Noncommercial License 1.0.0** with
+additional terms — see [`LICENSE`](LICENSE).
 
-In breve:
+In short:
 
-- **Gratis** per qualsiasi uso non commerciale / non professionale.
-- Copie e opere derivate possono essere ridistribuite **solo all'interno di un
-  progetto open source** (licenza approvata OSI, sorgente pubblico completo).
-- Tutti i diritti restano di esclusiva proprietà di Matteo Dalle Feste, che può
-  cambiare la licenza delle versioni future o chiudere il software in qualsiasi
-  momento.
-- **L'uso commerciale o professionale richiede un accordo scritto separato** —
-  contatta matteo@dallefeste.com.
+- **Free** for any non-commercial / non-professional use.
+- Copies and derivative works may be redistributed **only within an open source
+  project** (OSI-approved license, full public source).
+- All rights remain the exclusive property of Matteo Dalle Feste, who may
+  relicense future versions or close the software at any time.
+- **Commercial or professional use requires a separate written agreement** —
+  contact matteo@dallefeste.com.
