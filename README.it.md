@@ -13,7 +13,7 @@
 [![Home Assistant: Integration](https://img.shields.io/badge/Home%20Assistant-Integration-blue)](https://www.home-assistant.io/)
 [![hassfest](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml)
 [![HACS validation](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/commits)
 [![Issues](https://img.shields.io/github/issues/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/issues)
 [![Stars](https://img.shields.io/github/stars/matteodallefeste/ha_evbalance?style=flat)](https://github.com/matteodallefeste/ha_evbalance/stargazers)
@@ -132,16 +132,11 @@ diretto o indiretto, derivanti dall'uso di questo software.
 
 ## Licenza
 
-Source-available sotto **PolyForm Noncommercial License 1.0.0** con termini
-aggiuntivi — vedi [`LICENSE`](LICENSE).
+Concesso in licenza sotto la **GNU General Public License v3.0** — vedi [`LICENSE`](LICENSE).
 
 In breve:
 
-- **Gratis** per qualsiasi uso non commerciale / non professionale.
-- Copie e opere derivate possono essere ridistribuite **solo all'interno di un
-  progetto open source** (licenza approvata OSI, sorgente pubblico completo).
-- Tutti i diritti restano di esclusiva proprietà di Matteo Dalle Feste, che può
-  cambiare la licenza delle versioni future o chiudere il software in qualsiasi
-  momento.
-- **L'uso commerciale o professionale richiede un accordo scritto separato** —
-  contatta matteo@dallefeste.com.
+- **Libero** di usare, studiare, condividere e modificare.
+- Ogni copia distribuita o opera derivata deve restare **open source sotto la
+  GPL-3.0** e includere il sorgente completo corrispondente.
+- Fornito **senza alcuna garanzia**.

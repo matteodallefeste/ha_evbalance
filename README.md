@@ -13,7 +13,7 @@
 [![Home Assistant: Integration](https://img.shields.io/badge/Home%20Assistant-Integration-blue)](https://www.home-assistant.io/)
 [![hassfest](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml)
 [![HACS validation](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/commits)
 [![Issues](https://img.shields.io/github/issues/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/issues)
 [![Stars](https://img.shields.io/github/stars/matteodallefeste/ha_evbalance?style=flat)](https://github.com/matteodallefeste/ha_evbalance/stargazers)
@@ -132,15 +132,11 @@ the use of this software.
 
 ## License
 
-Source-available under the **PolyForm Noncommercial License 1.0.0** with
-additional terms — see [`LICENSE`](LICENSE).
+Licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
 
 In short:
 
-- **Free** for any non-commercial / non-professional use.
-- Copies and derivative works may be redistributed **only within an open source
-  project** (OSI-approved license, full public source).
-- All rights remain the exclusive property of Matteo Dalle Feste, who may
-  relicense future versions or close the software at any time.
-- **Commercial or professional use requires a separate written agreement** —
-  contact matteo@dallefeste.com.
+- **Free** to use, study, share, and modify.
+- Any distributed copy or derivative work must remain **open source under the
+  GPL-3.0** and include the full corresponding source.
+- Provided **without warranty** of any kind.

@@ -13,7 +13,7 @@
 [![Home Assistant: Integration](https://img.shields.io/badge/Home%20Assistant-Integration-blue)](https://www.home-assistant.io/)
 [![hassfest](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml)
 [![HACS validation](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/commits)
 [![Issues](https://img.shields.io/github/issues/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/issues)
 [![Stars](https://img.shields.io/github/stars/matteodallefeste/ha_evbalance?style=flat)](https://github.com/matteodallefeste/ha_evbalance/stargazers)
@@ -134,15 +134,11 @@ personnes, directement ou indirectement, découlant de l'usage de ce logiciel.
 
 ## Licence
 
-Source-available sous la **PolyForm Noncommercial License 1.0.0** avec des
-conditions supplémentaires — voir [`LICENSE`](LICENSE).
+Sous licence **GNU General Public License v3.0** — voir [`LICENSE`](LICENSE).
 
 En bref :
 
-- **Gratuit** pour tout usage non commercial / non professionnel.
-- Les copies et œuvres dérivées ne peuvent être redistribuées **qu'au sein d'un
-  projet open source** (licence approuvée par l'OSI, source publique complète).
-- Tous les droits restent la propriété exclusive de Matteo Dalle Feste, qui peut
-  changer la licence des versions futures ou fermer le logiciel à tout moment.
-- **L'usage commercial ou professionnel nécessite un accord écrit distinct** —
-  contact : matteo@dallefeste.com.
+- **Libre** d'utiliser, d'étudier, de partager et de modifier.
+- Toute copie distribuée ou œuvre dérivée doit rester **open source sous la
+  GPL-3.0** et inclure le code source complet correspondant.
+- Fourni **sans aucune garantie**.

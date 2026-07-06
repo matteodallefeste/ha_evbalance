@@ -13,7 +13,7 @@
 [![Home Assistant: Integration](https://img.shields.io/badge/Home%20Assistant-Integration-blue)](https://www.home-assistant.io/)
 [![hassfest](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/hassfest.yml)
 [![HACS validation](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml/badge.svg)](https://github.com/matteodallefeste/ha_evbalance/actions/workflows/validate.yml)
-[![License](https://img.shields.io/badge/license-Proprietary-red)](LICENSE)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
 [![Last commit](https://img.shields.io/github/last-commit/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/commits)
 [![Issues](https://img.shields.io/github/issues/matteodallefeste/ha_evbalance)](https://github.com/matteodallefeste/ha_evbalance/issues)
 [![Stars](https://img.shields.io/github/stars/matteodallefeste/ha_evbalance?style=flat)](https://github.com/matteodallefeste/ha_evbalance/stargazers)
@@ -134,15 +134,11 @@ direkt oder indirekt aus der Nutzung dieser Software entstehen.
 
 ## Lizenz
 
-Source-available unter der **PolyForm Noncommercial License 1.0.0** mit
-zusätzlichen Bedingungen — siehe [`LICENSE`](LICENSE).
+Lizenziert unter der **GNU General Public License v3.0** — siehe [`LICENSE`](LICENSE).
 
 Kurz gesagt:
 
-- **Kostenlos** für jede nicht-kommerzielle / nicht-berufliche Nutzung.
-- Kopien und abgeleitete Werke dürfen **nur innerhalb eines Open-Source-Projekts**
-  weiterverbreitet werden (OSI-anerkannte Lizenz, vollständiger öffentlicher Quellcode).
-- Alle Rechte bleiben ausschließliches Eigentum von Matteo Dalle Feste, der
-  zukünftige Versionen neu lizenzieren oder die Software jederzeit schließen kann.
-- **Kommerzielle oder berufliche Nutzung erfordert eine separate schriftliche
-  Vereinbarung** — Kontakt: matteo@dallefeste.com.
+- **Frei** zu nutzen, zu studieren, zu teilen und zu ändern.
+- Jede verbreitete Kopie oder abgeleitetes Werk muss **Open Source unter der
+  GPL-3.0** bleiben und den vollständigen zugehörigen Quellcode enthalten.
+- Bereitgestellt **ohne jegliche Gewährleistung**.
