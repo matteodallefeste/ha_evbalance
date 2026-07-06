@@ -67,7 +67,7 @@ from .const import (
     PANEL_URL_PATH,
     WS_TYPE_PANEL,
 )
-from .energy import FLAT_SCHEME, scheme_from_dict, scheme_to_dict
+from .energy import DEFAULT_SCHEME, scheme_from_dict, scheme_to_dict
 from .tariff_loader import get_presets
 
 WEBCOMPONENT_NAME = "evbalance-panel"
@@ -168,7 +168,7 @@ def _ws_panel(
     }
 
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    scheme = getattr(coordinator, "tariff_scheme", None) or FLAT_SCHEME
+    scheme = getattr(coordinator, "tariff_scheme", None) or DEFAULT_SCHEME
     preset = getattr(coordinator, "tariff_preset", scheme.id)
     bands = list(scheme.band_ids)
     band_meta = {

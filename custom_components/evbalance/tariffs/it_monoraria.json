@@ -1,0 +1,19 @@
+{
+  "type": "tou",
+  "id": "it_monoraria",
+  "country": "IT",
+  "label": "Italia — Monoraria (prezzo unico)",
+  "source_url": "https://www.arera.it/area-operatori/prezzi-e-tariffe",
+  "fallback": "mono",
+  "bands": [
+    { "id": "mono", "rank": 1, "label": "Monoraria", "color": "#29c7b0" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "mono", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

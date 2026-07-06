@@ -1,0 +1,40 @@
+{
+  "type": "tou",
+  "id": "kr_kepco_tou",
+  "country": "KR",
+  "label": "Korea — KEPCO 계시별 요금제 (esempio, stagionale)",
+  "source_url": "https://home.kepco.co.kr/kepco/CY/htmlView/CYHCHP00201.do",
+  "fallback": "off",
+  "bands": [
+    { "id": "peak", "rank": 3, "label": "최대부하 (Peak)", "color": "#ef4444" },
+    { "id": "mid", "rank": 2, "label": "중간부하 (Mid)", "color": "#f59e0b" },
+    { "id": "off", "rank": 1, "label": "경부하 (Off-peak)", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": [11, 12, 1, 2],
+      "rules": [
+        { "band": "off", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "09:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "09:00", "end": "10:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "10:00", "end": "12:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "12:00", "end": "17:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "17:00", "end": "20:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "20:00", "end": "22:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "23:00" },
+        { "band": "off", "days": [0, 1, 2, 3, 4, 5, 6], "start": "23:00", "end": "24:00" }
+      ]
+    },
+    {
+      "months": [3, 4, 5, 6, 7, 8, 9, 10],
+      "rules": [
+        { "band": "off", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "09:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "09:00", "end": "10:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "10:00", "end": "12:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "12:00", "end": "13:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "13:00", "end": "17:00" },
+        { "band": "mid", "days": [0, 1, 2, 3, 4, 5, 6], "start": "17:00", "end": "23:00" },
+        { "band": "off", "days": [0, 1, 2, 3, 4, 5, 6], "start": "23:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

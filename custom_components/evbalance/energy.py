@@ -267,12 +267,12 @@ def scheme_to_dict(scheme: TariffScheme) -> dict:
 
 
 # Schema minimo hardcoded: fallback di sicurezza se la cartella tariffs/ è
-# illeggibile e per i test che non caricano file.
-FLAT_SCHEME = TariffScheme(
-    id="flat",
-    bands=(Band(id="Flat", rank=1, label="Flat"),),
-    fallback="Flat",
-    rules=(BandRule("Flat", ALL_DAYS, 0, MINUTES_IN_DAY),),
+# illeggibile (rispecchia tariffs/default.json).
+DEFAULT_SCHEME = TariffScheme(
+    id="default",
+    bands=(Band(id="Default", rank=1, label="Default"),),
+    fallback="Default",
+    rules=(BandRule("Default", ALL_DAYS, 0, MINUTES_IN_DAY),),
 )
 
 

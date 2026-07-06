@@ -28,7 +28,7 @@ CONF_CURRENT_STEPS = "current_steps"      # valori A ammessi (vuoto = ogni inter
 CONF_PAUSE_CURRENT = "pause_current"      # A scritti per "fermare" la ricarica (default 0)
 CONF_HOLD_SECONDS = "hold_seconds"        # tempo minimo prima di rialzare la corrente
 CONF_UPDATE_INTERVAL = "update_interval"  # frequenza di lettura/attuazione (s)
-CONF_TARIFF_PRESET = "tariff_preset"      # "arera" | "flat"
+CONF_TARIFF_PRESET = "tariff_preset"      # id preset (es. "it_arera", "default") o "custom"
 CONF_TARIFFS = "tariffs"                  # definizione fasce (data-driven)
 CONF_SHOW_PANEL = "show_panel"            # mostra il pannello nella sidebar
 
@@ -42,7 +42,7 @@ DEFAULT_CURRENT_STEPS: list[int] = []   # vuoto = ogni intero da min_current a m
 DEFAULT_PAUSE_CURRENT = 0
 DEFAULT_HOLD_SECONDS = 300          # 5 minuti
 DEFAULT_UPDATE_INTERVAL = 3         # secondi
-DEFAULT_TARIFF_PRESET = "arera"
+DEFAULT_TARIFF_PRESET = "default"   # tariffa usata finché non se ne seleziona una
 DEFAULT_SHOW_PANEL = True
 DEFAULT_SOURCES_INCLUDE_EV_CHARGER = False
 

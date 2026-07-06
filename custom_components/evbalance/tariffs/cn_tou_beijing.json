@@ -1,0 +1,27 @@
+{
+  "type": "tou",
+  "id": "cn_tou_beijing",
+  "country": "CN",
+  "label": "China — 峰谷分时电价 (esempio Pechino, 居民)",
+  "source_url": "https://fgw.beijing.gov.cn/",
+  "fallback": "flat",
+  "bands": [
+    { "id": "peak", "rank": 3, "label": "峰 (Peak)", "color": "#ef4444" },
+    { "id": "flat", "rank": 2, "label": "平 (Flat)", "color": "#f59e0b" },
+    { "id": "valley", "rank": 1, "label": "谷 (Valley)", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "valley", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "07:00" },
+        { "band": "flat", "days": [0, 1, 2, 3, 4, 5, 6], "start": "07:00", "end": "10:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "10:00", "end": "15:00" },
+        { "band": "flat", "days": [0, 1, 2, 3, 4, 5, 6], "start": "15:00", "end": "18:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "18:00", "end": "21:00" },
+        { "band": "flat", "days": [0, 1, 2, 3, 4, 5, 6], "start": "21:00", "end": "23:00" },
+        { "band": "valley", "days": [0, 1, 2, 3, 4, 5, 6], "start": "23:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

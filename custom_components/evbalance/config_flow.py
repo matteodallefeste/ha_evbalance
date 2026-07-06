@@ -49,7 +49,7 @@ from .const import (
     DEFAULT_VOLTAGE,
     DOMAIN,
 )
-from .tariff_loader import get_presets
+from .tariff_loader import canonical_preset, get_presets
 
 POWER_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", device_class="power")
@@ -77,7 +77,7 @@ def _tariff_selector(hass) -> selector.SelectSelector:
         for scheme in presets.values()
     ]
     if not options:  # loader non ancora girato / cartella illeggibile
-        options = [selector.SelectOptionDict(value="flat", label="Fascia unica")]
+        options = [selector.SelectOptionDict(value="default", label="Default")]
     options.append(
         selector.SelectOptionDict(value="custom", label="Personalizzata (dal pannello)")
     )
@@ -89,16 +89,21 @@ def _tariff_selector(hass) -> selector.SelectSelector:
 
 
 def _country_default_preset(hass, current: str) -> str:
-    """Preset da preselezionare: quello già scelto, o quello del paese HA."""
+    """Preset da preselezionare: la scelta esplicita, o quello del paese HA.
+
+    Se non è stata scelta una tariffa specifica (valore ``default``, alias
+    storico o id ignoto) si prova a proporre quella del paese configurato in HA.
+    """
     presets = get_presets(hass)
-    if current in presets or current == "custom":
+    current = canonical_preset(current)
+    if current == "custom" or (current in presets and current != "default"):
         return current
     country = getattr(hass.config, "country", None)
     if country:
         for scheme in presets.values():
             if scheme.country and scheme.country.upper() == country.upper():
                 return scheme.id
-    return current
+    return current if current in presets else "default"
 
 
 def _parse_steps(raw: Any) -> list[int]:

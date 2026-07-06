@@ -421,13 +421,22 @@ class EVBalancePanel extends HTMLElement {
 
   _powerSensors() {
     const st = this._hass.states;
+    const own = this._ownEntityIds();
     return Object.keys(st)
       .filter(
         (id) =>
           id.startsWith("sensor.") &&
-          st[id].attributes.device_class === "power"
+          st[id].attributes.device_class === "power" &&
+          !own.has(id)
       )
       .sort();
+  }
+
+  // entity_id delle entità prodotte da EV Balance stessa: vanno escluse dalle
+  // sorgenti di consumo, altrimenti si selezionerebbe l'output come input.
+  _ownEntityIds() {
+    const ent = (this._meta && this._meta.entities) || {};
+    return new Set(Object.values(ent).filter(Boolean));
   }
 
   _numberEntities() {
@@ -737,7 +746,7 @@ class EVBalancePanel extends HTMLElement {
 
   _tariffSection(c) {
     const t = this._t;
-    const preset = c.tariff_preset || "flat";
+    const preset = c.tariff_preset || "default";
     const opts = (this._presets || [])
       .map(
         (p) =>

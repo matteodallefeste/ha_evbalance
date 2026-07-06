@@ -190,8 +190,8 @@ def test_shipped_presets_valid():
 
 def test_arera_regression():
     """Il preset ARERA deve dare le stesse bande della vecchia logica."""
-    data = json.loads((TARIFFS_DIR / "arera.json").read_text(encoding="utf-8"))
-    s = energy.scheme_from_dict(data, scheme_id="arera")
+    data = json.loads((TARIFFS_DIR / "it_arera.json").read_text(encoding="utf-8"))
+    s = energy.scheme_from_dict(data, scheme_id="it_arera")
     assert energy.active_band(s, datetime(2026, 7, 8, 10, 30)) == "F1"  # mer 10:30
     assert energy.active_band(s, datetime(2026, 7, 8, 7, 30)) == "F2"   # mer 07:30
     assert energy.active_band(s, datetime(2026, 7, 11, 12, 0)) == "F2"  # sab 12:00

@@ -9,7 +9,7 @@ JSON non conforme fallisce automaticamente.
 
 ## Come contribuire
 
-1. Copia un file esistente (es. [`arera.json`](arera.json)) e rinominalo
+1. Copia un file esistente (es. [`it_arera.json`](it_arera.json)) e rinominalo
    `<paese_piano>.json` (minuscolo, es. `es_pvpc.json`).
 2. Compila i campi seguendo lo schema qui sotto.
 3. Indica una `source_url` ufficiale (regolatore o distributore) da cui hai
@@ -65,7 +65,8 @@ con l'ora legale/solare, sono modellati come due `seasons` per mese.
 
 | File | Paese | Piano | Fasce |
 |------|-------|-------|-------|
-| [`arera.json`](arera.json) | 🇮🇹 IT | ARERA F1/F2/F3 | 3 |
+| [`it_arera.json`](it_arera.json) | 🇮🇹 IT | ARERA F1/F2/F3 | 3 |
+| [`it_monoraria.json`](it_monoraria.json) | 🇮🇹 IT | Monoraria (prezzo unico) | 1 |
 | [`es_pvpc.json`](es_pvpc.json) | 🇪🇸 ES | PVPC 2.0TD punta/llano/valle | 3 |
 | [`fr_hphc.json`](fr_hphc.json) | 🇫🇷 FR | Heures Pleines / Creuses | 2 |
 | [`pt_bihoraria.json`](pt_bihoraria.json) | 🇵🇹 PT | Bi-horária (ciclo diário) | 2 |
@@ -81,6 +82,22 @@ con l'ora legale/solare, sono modellati come due `seasons` per mese.
 | [`bg_daynight.json`](bg_daynight.json) | 🇧🇬 BG | Дневна/нощна (stagionale) | 2 |
 | [`ch_htnt.json`](ch_htnt.json) | 🇨🇭 CH | Hoch-/Niedertarif (comune) | 2 |
 | [`fi_yosahko.json`](fi_yosahko.json) | 🇫🇮 FI | Yösähkö giorno/notte | 2 |
+
+### Extra-UE
+
+Paesi non europei con una tariffa a fasce riconoscibile. Dove non esiste uno
+standard nazionale unico (USA, Cina, Corea: le fasce variano per utility o
+provincia) il preset è un esempio rappresentativo, da adattare al proprio
+distributore.
+
+| File | Paese | Piano | Fasce |
+|------|-------|-------|-------|
+| [`ru_threezone.json`](ru_threezone.json) | 🇷🇺 RU | Трёхзонный (пик/полупик/ночь) | 3 |
+| [`in_tod.json`](in_tod.json) | 🇮🇳 IN | Time of Day (MERC/MSEDCL) | 3 |
+| [`us_pge_touc.json`](us_pge_touc.json) | 🇺🇸 US | California PG&E E-TOU-C (esempio) | 2 |
+| [`cn_tou_beijing.json`](cn_tou_beijing.json) | 🇨🇳 CN | 峰谷分时 (esempio Pechino) | 3 |
+| [`jp_tepco_night8.json`](jp_tepco_night8.json) | 🇯🇵 JP | TEPCO おトクなナイト8 giorno/notte | 2 |
+| [`kr_kepco_tou.json`](kr_kepco_tou.json) | 🇰🇷 KR | KEPCO 계시별 (stagionale) | 3 |
 
 ### Paesi esclusi (di proposito)
 

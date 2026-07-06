@@ -18,7 +18,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from .const import DOMAIN
-from .energy import FLAT_SCHEME, TariffScheme, scheme_from_dict
+from .energy import DEFAULT_SCHEME, TariffScheme, scheme_from_dict
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -29,6 +29,8 @@ _PRESETS_KEY = "tariff_presets"
 _TARIFFS_DIR = os.path.join(os.path.dirname(__file__), "tariffs")
 # File nella cartella tariffs/ che non sono preset.
 _SKIP_FILES = {"schema.json"}
+# Id storici -> id attuali, per non rompere le config entry già salvate.
+_ALIASES = {"arera": "it_arera", "flat": "default"}
 
 
 def _load_presets_sync() -> dict[str, TariffScheme]:
@@ -63,8 +65,8 @@ async def async_load_presets(hass: HomeAssistant) -> dict[str, TariffScheme]:
     if cached is not None:
         return cached
     presets = await hass.async_add_executor_job(_load_presets_sync)
-    if "flat" not in presets:
-        presets["flat"] = FLAT_SCHEME
+    if "default" not in presets:
+        presets["default"] = DEFAULT_SCHEME
     data[_PRESETS_KEY] = presets
     return presets
 
@@ -72,6 +74,11 @@ async def async_load_presets(hass: HomeAssistant) -> dict[str, TariffScheme]:
 def get_presets(hass: HomeAssistant) -> dict[str, TariffScheme]:
     """Preset già caricati (dict vuoto se il loader non è ancora girato)."""
     return hass.data.get(DOMAIN, {}).get(_PRESETS_KEY, {})
+
+
+def canonical_preset(preset: str) -> str:
+    """Id attuale di un preset, risolvendo gli alias storici (es. arera->it_arera)."""
+    return _ALIASES.get(preset, preset)
 
 
 def resolve_scheme(
@@ -83,9 +90,11 @@ def resolve_scheme(
             return scheme_from_dict(tariffs_option, scheme_id="custom")
         except (ValueError, KeyError, TypeError) as err:
             _LOGGER.warning("Schema tariffa custom non valido, uso il fallback: %s", err)
-            return FLAT_SCHEME
+            return DEFAULT_SCHEME
     presets = get_presets(hass)
-    return presets.get(preset) or presets.get("flat") or FLAT_SCHEME
+    if preset not in presets:
+        preset = _ALIASES.get(preset, preset)
+    return presets.get(preset) or presets.get("default") or DEFAULT_SCHEME
 
 
 # --- Festivi nazionali -------------------------------------------------------

@@ -1,0 +1,25 @@
+{
+  "type": "tou",
+  "id": "in_tod",
+  "country": "IN",
+  "label": "India — Time of Day (framework MERC/MSEDCL)",
+  "source_url": "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=1934673",
+  "fallback": "normal",
+  "bands": [
+    { "id": "peak", "rank": 3, "label": "Peak", "color": "#ef4444" },
+    { "id": "normal", "rank": 2, "label": "Normal", "color": "#f59e0b" },
+    { "id": "solar", "rank": 1, "label": "Solar hours", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "09:00" },
+        { "band": "solar", "days": [0, 1, 2, 3, 4, 5, 6], "start": "09:00", "end": "17:00" },
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "17:00", "end": "22:00" },
+        { "band": "normal", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "24:00" },
+        { "band": "normal", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "06:00" }
+      ]
+    }
+  ]
+}

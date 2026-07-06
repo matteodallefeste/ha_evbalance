@@ -1,0 +1,20 @@
+{
+  "type": "tou",
+  "id": "us_pge_touc",
+  "country": "US",
+  "label": "USA — California PG&E E-TOU-C (esempio)",
+  "source_url": "https://www.pge.com/en/account/rate-plans/time-of-use-rate-plans.html",
+  "fallback": "off_peak",
+  "bands": [
+    { "id": "peak", "rank": 2, "label": "Peak", "color": "#ef4444" },
+    { "id": "off_peak", "rank": 1, "label": "Off-peak", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "peak", "days": [0, 1, 2, 3, 4, 5, 6], "start": "16:00", "end": "21:00" }
+      ]
+    }
+  ]
+}
