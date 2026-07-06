@@ -16,10 +16,12 @@ from .panel import (
     async_register_websocket,
     async_remove_panel_if_present,
 )
+from .tariff_loader import async_load_presets
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up globale: registra il comando websocket del pannello."""
+    """Set up globale: carica i preset tariffa e registra il websocket del pannello."""
+    await async_load_presets(hass)
     async_register_websocket(hass)
     return True
 

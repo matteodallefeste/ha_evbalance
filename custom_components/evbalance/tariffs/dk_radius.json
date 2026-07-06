@@ -1,0 +1,24 @@
+{
+  "type": "tou",
+  "id": "dk_radius",
+  "country": "DK",
+  "label": "Danmark — Nettarif (Radius, tarifmodel 3.0)",
+  "source_url": "https://radiuselnet.dk/elnetkunder/tariffer-og-netabonnement/",
+  "fallback": "hoejlast",
+  "bands": [
+    { "id": "spidslast", "rank": 3, "label": "Spidslast", "color": "#ef4444" },
+    { "id": "hoejlast", "rank": 2, "label": "Højlast", "color": "#f59e0b" },
+    { "id": "lavlast", "rank": 1, "label": "Lavlast", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "lavlast", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "06:00" },
+        { "band": "hoejlast", "days": [0, 1, 2, 3, 4, 5, 6], "start": "06:00", "end": "17:00" },
+        { "band": "spidslast", "days": [0, 1, 2, 3, 4, 5, 6], "start": "17:00", "end": "21:00" },
+        { "band": "hoejlast", "days": [0, 1, 2, 3, 4, 5, 6], "start": "21:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

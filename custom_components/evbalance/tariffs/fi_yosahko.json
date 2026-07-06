@@ -1,0 +1,21 @@
+{
+  "type": "tou",
+  "id": "fi_yosahko",
+  "country": "FI",
+  "label": "Suomi — Yösähkö (päivä/yö)",
+  "source_url": "https://www.fingrid.fi/",
+  "fallback": "paiva",
+  "bands": [
+    { "id": "paiva", "rank": 2, "label": "Päiväsähkö", "color": "#ef4444" },
+    { "id": "yo", "rank": 1, "label": "Yösähkö", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "yo", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "07:00" },
+        { "band": "yo", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

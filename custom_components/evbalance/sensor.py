@@ -53,7 +53,7 @@ async def async_setup_entry(
         label = st.attributes.get("friendly_name") if st else None
         energy_keys.append((eid, label or eid))
 
-    bands = preset_bands(coordinator.tariff_preset)
+    bands = preset_bands(coordinator.tariff_scheme)
     for key, label in energy_keys:
         for band in bands:
             for period in ("daily", "monthly"):
@@ -124,6 +124,11 @@ class EVBandSensor(EVBalanceEntity, SensorEntity):
         if self.coordinator.data is None:
             return None
         return self.coordinator.data.get("active_band")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self.coordinator.data or {}
+        return {"rank": data.get("active_band_rank")}
 
 
 class EVEnergySensor(EVBalanceEntity, RestoreSensor):

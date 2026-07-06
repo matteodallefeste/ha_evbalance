@@ -49,6 +49,7 @@ from .const import (
     DEFAULT_VOLTAGE,
     DOMAIN,
 )
+from .tariff_loader import get_presets
 
 POWER_SENSOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", device_class="power")
@@ -68,15 +69,36 @@ PHASES_SELECT = selector.SelectSelector(
         mode=selector.SelectSelectorMode.DROPDOWN,
     )
 )
-TARIFF_SELECT = selector.SelectSelector(
-    selector.SelectSelectorConfig(
-        options=[
-            selector.SelectOptionDict(value="arera", label="ARERA F1/F2/F3"),
-            selector.SelectOptionDict(value="flat", label="Fascia unica"),
-        ],
-        mode=selector.SelectSelectorMode.DROPDOWN,
+def _tariff_selector(hass) -> selector.SelectSelector:
+    """Selettore tariffa costruito dai preset caricati + voce 'custom'."""
+    presets = get_presets(hass)
+    options = [
+        selector.SelectOptionDict(value=scheme.id, label=scheme.label or scheme.id)
+        for scheme in presets.values()
+    ]
+    if not options:  # loader non ancora girato / cartella illeggibile
+        options = [selector.SelectOptionDict(value="flat", label="Fascia unica")]
+    options.append(
+        selector.SelectOptionDict(value="custom", label="Personalizzata (dal pannello)")
     )
-)
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=options, mode=selector.SelectSelectorMode.DROPDOWN
+        )
+    )
+
+
+def _country_default_preset(hass, current: str) -> str:
+    """Preset da preselezionare: quello già scelto, o quello del paese HA."""
+    presets = get_presets(hass)
+    if current in presets or current == "custom":
+        return current
+    country = getattr(hass.config, "country", None)
+    if country:
+        for scheme in presets.values():
+            if scheme.country and scheme.country.upper() == country.upper():
+                return scheme.id
+    return current
 
 
 def _parse_steps(raw: Any) -> list[int]:
@@ -205,8 +227,11 @@ class EVBalanceOptionsFlow(OptionsFlow):
                 ): vol.Coerce(int),
                 vol.Required(
                     CONF_TARIFF_PRESET,
-                    default=self._current(CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET),
-                ): TARIFF_SELECT,
+                    default=_country_default_preset(
+                        self.hass,
+                        self._current(CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET),
+                    ),
+                ): _tariff_selector(self.hass),
                 vol.Required(
                     CONF_SHOW_PANEL,
                     default=self._current(CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL),

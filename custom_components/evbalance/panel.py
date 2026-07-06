@@ -42,6 +42,7 @@ from .const import (
     CONF_SOURCES,
     CONF_SOURCES_INCLUDE_EV_CHARGER,
     CONF_TARIFF_PRESET,
+    CONF_TARIFFS,
     CONF_UPDATE_INTERVAL,
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
@@ -66,7 +67,8 @@ from .const import (
     PANEL_URL_PATH,
     WS_TYPE_PANEL,
 )
-from .energy import preset_bands
+from .energy import FLAT_SCHEME, scheme_from_dict, scheme_to_dict
+from .tariff_loader import get_presets
 
 WEBCOMPONENT_NAME = "evbalance-panel"
 _STATIC_FLAG = "static_registered"
@@ -94,6 +96,7 @@ _OPTION_KEYS = (
     CONF_HOLD_SECONDS,
     CONF_UPDATE_INTERVAL,
     CONF_TARIFF_PRESET,
+    CONF_TARIFFS,
     CONF_SHOW_PANEL,
 )
 
@@ -165,8 +168,13 @@ def _ws_panel(
     }
 
     coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    preset = getattr(coordinator, "tariff_preset", "arera")
-    bands = list(preset_bands(preset))
+    scheme = getattr(coordinator, "tariff_scheme", None) or FLAT_SCHEME
+    preset = getattr(coordinator, "tariff_preset", scheme.id)
+    bands = list(scheme.band_ids)
+    band_meta = {
+        b.id: {"label": b.label or b.id, "rank": b.rank, "color": b.color}
+        for b in scheme.bands
+    }
 
     # Statistic_id dei sensori energia "totale casa" per fascia (periodo daily):
     # basta un sensore total_increasing per fascia, i delta mensili si ottengono
@@ -186,6 +194,7 @@ def _ws_panel(
             "title": entry.title,
             "preset": preset,
             "bands": bands,
+            "band_meta": band_meta,
             "entities": entities,
             "band_stats": band_stats,
             "max_power_w": max_power_w,
@@ -231,6 +240,7 @@ def _current_config(entry) -> dict[str, Any]:
         CONF_TARIFF_PRESET: _entry_value(
             entry, CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET
         ),
+        CONF_TARIFFS: _entry_value(entry, CONF_TARIFFS, None),
         CONF_SHOW_PANEL: bool(_entry_value(entry, CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)),
     }
 
@@ -247,11 +257,13 @@ def _ws_config_get(
     if not entries:
         connection.send_error(msg["id"], "not_found", "Nessuna config entry")
         return
+    presets = [scheme_to_dict(scheme) for scheme in get_presets(hass).values()]
     connection.send_result(
         msg["id"],
         {
             "config": _current_config(entries[0]),
             "can_edit": connection.user.is_admin,
+            "presets": presets,
         },
     )
 
@@ -266,6 +278,13 @@ def _coerce(key: str, value: Any) -> Any:
         return float(value)
     if key == CONF_SOURCES:
         return [str(v) for v in (value or [])]
+    if key == CONF_TARIFFS:
+        if not value:
+            return None
+        # Valida costruendo lo schema: uno schema custom invalido solleva
+        # ValueError -> il chiamante risponde "invalid_format".
+        scheme_from_dict(value, scheme_id="custom")
+        return value
     return value
 
 

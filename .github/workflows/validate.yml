@@ -16,3 +16,15 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+
+  tariffs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install jsonschema
+        run: pip install jsonschema
+      - name: Validate tariff presets
+        run: python tools/validate_tariffs.py

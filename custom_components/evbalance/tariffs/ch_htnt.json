@@ -1,0 +1,22 @@
+{
+  "type": "tou",
+  "id": "ch_htnt",
+  "country": "CH",
+  "label": "Schweiz — Hoch-/Niedertarif (comune, tipo EWZ)",
+  "source_url": "https://www.ewz.ch/de/private/strom/tarife/tarifuebersicht.html",
+  "fallback": "ht",
+  "bands": [
+    { "id": "ht", "rank": 2, "label": "Hochtarif", "color": "#ef4444" },
+    { "id": "nt", "rank": 1, "label": "Niedertarif", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "nt", "days": [0, 1, 2, 3, 4, 5], "start": "00:00", "end": "06:00" },
+        { "band": "nt", "days": [0, 1, 2, 3, 4, 5], "start": "22:00", "end": "24:00" },
+        { "band": "nt", "days": [6], "start": "00:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

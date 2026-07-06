@@ -1,0 +1,20 @@
+{
+  "type": "tou",
+  "id": "gb_economy7",
+  "country": "GB",
+  "label": "United Kingdom — Economy 7 (night)",
+  "source_url": "https://www.ofgem.gov.uk/information-consumers/energy-advice-households/economy-7-consumer-guide",
+  "fallback": "day",
+  "bands": [
+    { "id": "day", "rank": 2, "label": "Day", "color": "#ef4444" },
+    { "id": "night", "rank": 1, "label": "Night", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "night", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "07:00" }
+      ]
+    }
+  ]
+}

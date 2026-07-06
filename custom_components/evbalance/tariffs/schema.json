@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/matteodallefeste/ha_evbalance/tariffs/schema.json",
+  "title": "EV Balance tariff preset",
+  "description": "Schema di un preset di fasce orarie (time-of-use) contribuibile.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "label", "bands", "fallback", "seasons"],
+  "properties": {
+    "type": { "const": "tou" },
+    "id": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "country": { "type": "string", "pattern": "^[A-Z]{2}$" },
+    "label": { "type": "string", "minLength": 1 },
+    "source_url": { "type": "string", "format": "uri" },
+    "fallback": { "type": "string", "minLength": 1 },
+    "holidays_as": { "type": "string", "minLength": 1 },
+    "bands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "rank"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "rank": { "type": "integer", "minimum": 1 },
+          "label": { "type": "string" },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+        }
+      }
+    },
+    "seasons": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rules"],
+        "properties": {
+          "months": {
+            "type": ["array", "null"],
+            "items": { "type": "integer", "minimum": 1, "maximum": 12 }
+          },
+          "rules": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["band", "days", "start", "end"],
+              "properties": {
+                "band": { "type": "string", "minLength": 1 },
+                "days": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "integer", "minimum": 0, "maximum": 6 }
+                },
+                "start": { "type": "string", "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$" },
+                "end": { "type": "string", "pattern": "^([01][0-9]|2[0-4]):[0-5][0-9]$" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

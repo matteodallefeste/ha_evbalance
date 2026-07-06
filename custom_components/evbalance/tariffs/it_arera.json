@@ -1,0 +1,25 @@
+{
+  "type": "tou",
+  "id": "arera",
+  "country": "IT",
+  "label": "Italia — ARERA F1/F2/F3",
+  "source_url": "https://www.arera.it/area-operatori/prezzi-e-tariffe",
+  "fallback": "F3",
+  "holidays_as": "F3",
+  "bands": [
+    { "id": "F1", "rank": 3, "label": "Ore di punta", "color": "#ef4444" },
+    { "id": "F2", "rank": 2, "label": "Ore intermedie", "color": "#f59e0b" },
+    { "id": "F3", "rank": 1, "label": "Ore fuori punta", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "F1", "days": [0, 1, 2, 3, 4], "start": "08:00", "end": "19:00" },
+        { "band": "F2", "days": [0, 1, 2, 3, 4], "start": "07:00", "end": "08:00" },
+        { "band": "F2", "days": [0, 1, 2, 3, 4], "start": "19:00", "end": "23:00" },
+        { "band": "F2", "days": [5], "start": "07:00", "end": "23:00" }
+      ]
+    }
+  ]
+}

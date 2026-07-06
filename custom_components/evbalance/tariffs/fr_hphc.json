@@ -1,0 +1,21 @@
+{
+  "type": "tou",
+  "id": "fr_hphc",
+  "country": "FR",
+  "label": "France — Heures Pleines / Heures Creuses (22h-6h)",
+  "source_url": "https://particulier.edf.fr/fr/accueil/guide-energie/electricite/comprendre-heures-creuses.html",
+  "fallback": "HP",
+  "bands": [
+    { "id": "HP", "rank": 2, "label": "Heures pleines", "color": "#ef4444" },
+    { "id": "HC", "rank": 1, "label": "Heures creuses", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "HC", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "06:00" },
+        { "band": "HC", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

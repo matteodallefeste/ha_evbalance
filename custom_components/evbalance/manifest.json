@@ -8,6 +8,6 @@
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/matteodallefeste/ha_evbalance/issues",
-  "requirements": [],
+  "requirements": ["holidays"],
   "version": "26.7.10"
 }

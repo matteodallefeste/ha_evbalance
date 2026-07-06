@@ -1,0 +1,21 @@
+{
+  "type": "tou",
+  "id": "pt_bihoraria",
+  "country": "PT",
+  "label": "Portugal — Bi-horária (ciclo diário)",
+  "source_url": "https://www.edp.pt/particulares/apoio-cliente/perguntas-frequentes/",
+  "fallback": "fora_vazio",
+  "bands": [
+    { "id": "fora_vazio", "rank": 2, "label": "Fora de vazio", "color": "#ef4444" },
+    { "id": "vazio", "rank": 1, "label": "Vazio", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "vazio", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "08:00" },
+        { "band": "vazio", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

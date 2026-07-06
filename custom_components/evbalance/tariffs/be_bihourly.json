@@ -1,0 +1,22 @@
+{
+  "type": "tou",
+  "id": "be_bihourly",
+  "country": "BE",
+  "label": "België — Tweevoudig tarief dag/nacht (Vlaanderen)",
+  "source_url": "https://www.fluvius.be/nl/aansluitingen/uren-van-het-dag-en-nachttarief",
+  "fallback": "dag",
+  "bands": [
+    { "id": "dag", "rank": 2, "label": "Dagtarief", "color": "#ef4444" },
+    { "id": "nacht", "rank": 1, "label": "Nachttarief", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "nacht", "days": [0, 1, 2, 3, 4], "start": "00:00", "end": "07:00" },
+        { "band": "nacht", "days": [0, 1, 2, 3, 4], "start": "22:00", "end": "24:00" },
+        { "band": "nacht", "days": [5, 6], "start": "00:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

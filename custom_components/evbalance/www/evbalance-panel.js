@@ -34,6 +34,8 @@ class EVBalancePanel extends HTMLElement {
     this._hass = null;
     this._meta = null;
     this._config = null; // snapshot configurazione per il form Impostazioni
+    this._presets = []; // preset tariffa disponibili (da config/get)
+    this._customScheme = null; // schema custom in editing (editor fasce)
     this._tr = {}; // stringhe di traduzione, caricate in _init()
     this._canEdit = false;
     this._initStarted = false;
@@ -92,6 +94,8 @@ class EVBalancePanel extends HTMLElement {
       const res = await this._hass.callWS({ type: "evbalance/config/get" });
       this._config = res.config;
       this._canEdit = !!res.can_edit;
+      this._presets = res.presets || [];
+      this._customScheme = null;
     } catch (err) {
       this._config = null;
     }
@@ -294,7 +298,7 @@ class EVBalancePanel extends HTMLElement {
       .map((b) => {
         const val = totals[b] || 0;
         const pct = Math.round((val / max) * 100);
-        const color = BAND_COLORS[b] || BAND_FALLBACK;
+        const color = this._bandColor(b);
         return `
           <div class="bar-row">
             <span class="bar-label" style="color:${color}">${b}</span>
@@ -514,7 +518,6 @@ class EVBalancePanel extends HTMLElement {
 
     const c = this._config;
     const phases = Number(c.phases) === 3 ? 3 : 1;
-    const tariff = c.tariff_preset || "arera";
 
     const body = `
       <div class="form-grid">
@@ -545,11 +548,7 @@ class EVBalancePanel extends HTMLElement {
         ${this._fieldNum("hold_seconds", t.fHoldSeconds, 5)}
         ${this._fieldNum("update_interval", t.fUpdateInterval, 1)}
 
-        <label class="field"><span>${t.fTariff}</span>
-          <select id="cfg-tariff_preset">
-            <option value="arera" ${tariff === "arera" ? "selected" : ""}>${t.fTariffArera}</option>
-            <option value="flat" ${tariff === "flat" ? "selected" : ""}>${t.fTariffFlat}</option>
-          </select></label>
+        ${this._tariffSection(c)}
 
         <label class="cb-row single wide">
           <input type="checkbox" id="cfg-show_panel" ${
@@ -571,6 +570,7 @@ class EVBalancePanel extends HTMLElement {
     if (bal) {
       bal.addEventListener("change", (e) => this._toggleBalancing(e.target.checked));
     }
+    this._wireTariff();
   }
 
   async _toggleBalancing(on) {
@@ -589,6 +589,7 @@ class EVBalancePanel extends HTMLElement {
   _readForm() {
     const root = this.shadowRoot;
     const g = (id) => root.getElementById(id);
+    const tariffPreset = g("cfg-tariff_preset").value;
     return {
       name: g("cfg-name").value.trim(),
       ev_charger_power_entity: g("cfg-ev_charger_power_entity").value,
@@ -604,7 +605,8 @@ class EVBalancePanel extends HTMLElement {
       pause_current: Number(g("cfg-pause_current").value),
       hold_seconds: Number(g("cfg-hold_seconds").value),
       update_interval: Number(g("cfg-update_interval").value),
-      tariff_preset: g("cfg-tariff_preset").value,
+      tariff_preset: tariffPreset,
+      tariffs: tariffPreset === "custom" ? this._buildTariffPayload() : null,
       show_panel: g("cfg-show_panel").checked,
     };
   }
@@ -648,6 +650,282 @@ class EVBalancePanel extends HTMLElement {
   _syncModeButtons() {
     this.shadowRoot.querySelectorAll(".mode").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.mode === this._mode);
+    });
+  }
+
+  // --- Editor fasce orarie (tariffa custom) ----------------------------
+
+  _bandColor(id) {
+    const meta = this._meta && this._meta.band_meta && this._meta.band_meta[id];
+    if (meta && meta.color) return meta.color;
+    if (BAND_COLORS[id]) return BAND_COLORS[id];
+    const palette = ["#22c78b", "#f59e0b", "#ef4444", "#8b5cf6"];
+    const rank = meta ? meta.rank : null;
+    if (rank != null) return palette[Math.min(rank - 1, palette.length - 1)] || BAND_FALLBACK;
+    return BAND_FALLBACK;
+  }
+
+  _presetById(id) {
+    return (this._presets || []).find((p) => p.id === id) || null;
+  }
+
+  _blankScheme() {
+    return {
+      bands: [{ id: "F1", rank: 1, label: "", color: "#29c7b0" }],
+      fallback: "F1",
+      holidays_as: "",
+      country: null,
+      months: null,
+      rules: [{ band: "F1", days: [0, 1, 2, 3, 4, 5, 6], start: "00:00", end: "24:00" }],
+    };
+  }
+
+  // Appiattisce un preset (forma scheme_to_dict) nel modello a stagione singola
+  // dell'editor. I nostri preset built-in sono non-stagionali (months=null).
+  _seedFromPreset(p) {
+    if (!p || !Array.isArray(p.bands)) return this._blankScheme();
+    const seasons = Array.isArray(p.seasons) ? p.seasons : [];
+    const rules = [];
+    seasons.forEach((s) =>
+      (s.rules || []).forEach((r) =>
+        rules.push({
+          band: r.band,
+          days: (r.days || []).slice(),
+          start: r.start,
+          end: r.end,
+        })
+      )
+    );
+    const months = seasons.length && seasons[0].months ? seasons[0].months.slice() : null;
+    return {
+      bands: p.bands.map((b) => ({
+        id: b.id,
+        rank: b.rank,
+        label: b.label || "",
+        color: b.color || "",
+      })),
+      fallback: p.fallback || (p.bands[0] && p.bands[0].id) || "F1",
+      holidays_as: p.holidays_as || "",
+      country: p.country || null,
+      months,
+      rules: rules.length ? rules : this._blankScheme().rules,
+    };
+  }
+
+  _ensureCustomScheme() {
+    if (this._customScheme) return this._customScheme;
+    const cfgT = this._config && this._config.tariffs;
+    if (cfgT && Array.isArray(cfgT.bands)) {
+      this._customScheme = this._seedFromPreset(cfgT);
+    } else {
+      const src = this._presetById(this._config && this._config.tariff_preset);
+      this._customScheme = src ? this._seedFromPreset(src) : this._blankScheme();
+    }
+    return this._customScheme;
+  }
+
+  _bandOptions(selected) {
+    return this._ensureCustomScheme()
+      .bands.map(
+        (b) =>
+          `<option value="${this._esc(b.id)}" ${b.id === selected ? "selected" : ""}>${this._esc(
+            b.id
+          )}</option>`
+      )
+      .join("");
+  }
+
+  _tariffSection(c) {
+    const t = this._t;
+    const preset = c.tariff_preset || "flat";
+    const opts = (this._presets || [])
+      .map(
+        (p) =>
+          `<option value="${this._esc(p.id)}" ${p.id === preset ? "selected" : ""}>${this._esc(
+            p.label || p.id
+          )}</option>`
+      )
+      .join("");
+    const customOpt = `<option value="custom" ${
+      preset === "custom" ? "selected" : ""
+    }>${t.fTariffCustom}</option>`;
+    return `
+      <label class="field wide"><span>${t.fTariff}</span>
+        <select id="cfg-tariff_preset">${opts}${customOpt}</select></label>
+      <div id="tariff-editor" class="field wide">${
+        preset === "custom" ? this._tariffEditorHtml() : ""
+      }</div>`;
+  }
+
+  _tariffEditorHtml() {
+    const t = this._t;
+    const s = this._ensureCustomScheme();
+    const dupOpts = (this._presets || [])
+      .map((p) => `<option value="${this._esc(p.id)}">${this._esc(p.label || p.id)}</option>`)
+      .join("");
+
+    const bandRows = s.bands
+      .map(
+        (b, i) => `
+      <div class="trow" data-band="${i}">
+        <input class="b-id" value="${this._esc(b.id)}" placeholder="id">
+        <input class="b-label" value="${this._esc(b.label || "")}" placeholder="${t.tColLabel}">
+        <input class="b-rank" type="number" min="1" value="${b.rank || 1}" title="${t.tColRank}">
+        <input class="b-color" type="color" value="${b.color || "#29c7b0"}">
+        <button class="tdel" data-act="del-band" data-i="${i}" title="${t.tDel}">✕</button>
+      </div>`
+      )
+      .join("");
+
+    const ruleRows = s.rules
+      .map((r, i) => {
+        const days = this._dayCheckboxes(r.days || [], i);
+        return `
+      <div class="trow rule" data-rule="${i}">
+        <select class="r-band">${this._bandOptions(r.band)}</select>
+        <div class="days">${days}</div>
+        <input class="r-start" value="${this._esc(r.start || "")}" placeholder="00:00">
+        <input class="r-end" value="${this._esc(r.end || "")}" placeholder="24:00">
+        <button class="tdel" data-act="del-rule" data-i="${i}" title="${t.tDel}">✕</button>
+      </div>`;
+      })
+      .join("");
+
+    return `
+      <div class="tariff-box">
+        <div class="dup-row">
+          <span class="hint">${t.tDupHint}</span>
+          <select id="tariff-dup">${dupOpts}</select>
+          <button class="mini" data-act="dup">${t.tDup}</button>
+        </div>
+
+        <div class="sub">${t.tBandsTitle}</div>
+        <div id="tariff-bands">${bandRows}</div>
+        <button class="mini" data-act="add-band">+ ${t.tAddBand}</button>
+
+        <div class="sub">${t.tRulesTitle}</div>
+        <div id="tariff-rules">${ruleRows}</div>
+        <button class="mini" data-act="add-rule">+ ${t.tAddRule}</button>
+
+        <div class="tariff-foot">
+          <label class="field"><span>${t.tFallback}</span>
+            <select id="tariff-fallback">${this._bandOptions(s.fallback)}</select></label>
+          <label class="field"><span>${t.tHolidays}</span>
+            <select id="tariff-holidays"><option value="">${t.tNone}</option>${this._bandOptions(
+      s.holidays_as
+    )}</select></label>
+          <label class="field"><span>${t.tMonths}</span>
+            <input id="tariff-months" value="${
+              s.months ? s.months.join(",") : ""
+            }" placeholder="${t.tMonthsHint}"></label>
+        </div>
+      </div>`;
+  }
+
+  _dayCheckboxes(selected, ruleIdx) {
+    const names = this._t.tDays || ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    const sel = new Set(selected);
+    return names
+      .map(
+        (n, d) =>
+          `<label class="day ${sel.has(d) ? "on" : ""}"><input type="checkbox" class="r-day" data-day="${d}" ${
+            sel.has(d) ? "checked" : ""
+          }>${n}</label>`
+      )
+      .join("");
+  }
+
+  // Legge lo stato corrente dell'editor dal DOM nel modello (prima di
+  // ri-renderizzare o salvare), così le modifiche in corso non si perdono.
+  _readTariffEditor() {
+    const root = this.shadowRoot;
+    const box = root.getElementById("tariff-editor");
+    if (!box || !box.querySelector(".tariff-box")) return this._customScheme;
+    const bands = Array.from(box.querySelectorAll("#tariff-bands .trow")).map((row) => ({
+      id: row.querySelector(".b-id").value.trim(),
+      label: row.querySelector(".b-label").value.trim(),
+      rank: Number(row.querySelector(".b-rank").value) || 1,
+      color: row.querySelector(".b-color").value,
+    })).filter((b) => b.id);
+    const rules = Array.from(box.querySelectorAll("#tariff-rules .rule")).map((row) => ({
+      band: row.querySelector(".r-band").value,
+      days: Array.from(row.querySelectorAll(".r-day"))
+        .filter((cb) => cb.checked)
+        .map((cb) => Number(cb.dataset.day)),
+      start: row.querySelector(".r-start").value.trim(),
+      end: row.querySelector(".r-end").value.trim(),
+    }));
+    const monthsRaw = (root.getElementById("tariff-months").value || "").trim();
+    const months = monthsRaw
+      ? monthsRaw.split(",").map((m) => Number(m.trim())).filter((m) => m >= 1 && m <= 12)
+      : null;
+    this._customScheme = {
+      bands: bands.length ? bands : this._blankScheme().bands,
+      fallback: root.getElementById("tariff-fallback").value,
+      holidays_as: root.getElementById("tariff-holidays").value,
+      country: (this._customScheme && this._customScheme.country) || null,
+      months: months && months.length ? months : null,
+      rules,
+    };
+    return this._customScheme;
+  }
+
+  _renderTariffEditor() {
+    const box = this.shadowRoot.getElementById("tariff-editor");
+    if (box) box.innerHTML = this._tariffEditorHtml();
+  }
+
+  // Costruisce il payload `tariffs` (forma JSON schema) dal modello editor.
+  _buildTariffPayload() {
+    const s = this._readTariffEditor();
+    const payload = {
+      type: "tou",
+      id: "custom",
+      bands: s.bands,
+      fallback: s.fallback,
+      seasons: [{ months: s.months, rules: s.rules }],
+    };
+    if (s.holidays_as) payload.holidays_as = s.holidays_as;
+    if (s.country) payload.country = s.country;
+    return payload;
+  }
+
+  _wireTariff() {
+    const sel = this.shadowRoot.getElementById("cfg-tariff_preset");
+    if (sel) {
+      sel.addEventListener("change", () => {
+        if (sel.value === "custom") this._ensureCustomScheme();
+        this._renderTariffEditor();
+      });
+    }
+    const box = this.shadowRoot.getElementById("tariff-editor");
+    if (!box) return;
+    box.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      e.preventDefault();
+      const act = btn.dataset.act;
+      const s = this._readTariffEditor();
+      if (act === "add-band") {
+        s.bands.push({ id: "F" + (s.bands.length + 1), rank: s.bands.length + 1, label: "", color: "#29c7b0" });
+      } else if (act === "del-band") {
+        s.bands.splice(Number(btn.dataset.i), 1);
+      } else if (act === "add-rule") {
+        const first = s.bands[0] ? s.bands[0].id : "F1";
+        s.rules.push({ band: first, days: [0, 1, 2, 3, 4], start: "00:00", end: "24:00" });
+      } else if (act === "del-rule") {
+        s.rules.splice(Number(btn.dataset.i), 1);
+      } else if (act === "dup") {
+        const id = this.shadowRoot.getElementById("tariff-dup").value;
+        const p = this._presetById(id);
+        if (p) this._customScheme = this._seedFromPreset(p);
+      }
+      this._renderTariffEditor();
+    });
+    box.addEventListener("change", (e) => {
+      if (e.target.classList.contains("r-day")) {
+        e.target.closest(".day").classList.toggle("on", e.target.checked);
+      }
     });
   }
 
@@ -742,6 +1020,42 @@ class EVBalancePanel extends HTMLElement {
         .save-status { font-size:13px; }
         .save-status.ok { color:#22c78b; }
         .save-status.err { color:#ef4444; }
+
+        .tariff-box {
+          grid-column:1 / -1; margin-top:6px; padding:12px; border-radius:10px;
+          border:1px solid var(--divider-color,#e0e0e0);
+          background: var(--secondary-background-color,#f7f8fa);
+          display:flex; flex-direction:column; gap:8px;
+        }
+        .tariff-box .sub { font-size:12px; font-weight:600; opacity:.7; margin-top:6px; }
+        .tariff-box .dup-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .tariff-box .dup-row .hint { flex:1 1 auto; min-width:120px; }
+        .tariff-box select, .tariff-box input {
+          padding:6px 8px; border-radius:7px; font-size:13px; color:inherit;
+          border:1px solid var(--divider-color,#d0d0d0);
+          background: var(--card-background-color,#fff);
+        }
+        .trow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:4px 0; }
+        .trow .b-id { width:70px; }
+        .trow .b-label { flex:1 1 90px; min-width:80px; }
+        .trow .b-rank { width:56px; }
+        .trow .b-color { width:38px; padding:2px; height:30px; }
+        .trow.rule .r-band { width:96px; }
+        .trow.rule .r-start, .trow.rule .r-end { width:64px; }
+        .days { display:flex; gap:3px; flex-wrap:wrap; }
+        .day {
+          font-size:11px; padding:3px 6px; border-radius:6px; cursor:pointer; user-select:none;
+          border:1px solid var(--divider-color,#d0d0d0); opacity:.6;
+        }
+        .day.on { opacity:1; background:#29c7b0; color:#fff; border-color:#29c7b0; }
+        .day input { display:none; }
+        .tdel { border:none; background:transparent; cursor:pointer; color:#ef4444; font-size:14px; padding:2px 6px; }
+        .mini {
+          align-self:flex-start; border:none; cursor:pointer; padding:5px 12px; border-radius:999px;
+          font-size:12px; font-weight:600; background: var(--divider-color,#e0e0e0); color:inherit;
+        }
+        .tariff-foot { display:flex; gap:12px; flex-wrap:wrap; margin-top:8px; }
+        .tariff-foot .field { flex:1 1 120px; }
       </style>`;
   }
 }

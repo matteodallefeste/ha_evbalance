@@ -33,6 +33,7 @@ from .const import (
     CONF_SOURCES,
     CONF_SOURCES_INCLUDE_EV_CHARGER,
     CONF_TARIFF_PRESET,
+    CONF_TARIFFS,
     CONF_UPDATE_INTERVAL,
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
@@ -50,7 +51,8 @@ from .const import (
     DEFAULT_VOLTAGE,
     DOMAIN,
 )
-from .energy import active_band
+from .energy import TariffScheme, active_band
+from .tariff_loader import holidays_for_scheme, resolve_scheme
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -98,6 +100,13 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
     @property
     def tariff_preset(self) -> str:
         return self._opt(CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET)
+
+    @property
+    def tariff_scheme(self) -> TariffScheme:
+        """Schema tariffario risolto (preset built-in o custom dalle options)."""
+        return resolve_scheme(
+            self.hass, self.tariff_preset, self._opt(CONF_TARIFFS, None)
+        )
 
     def _read_w(self, entity_id: str) -> float:
         """Legge un sensore di potenza in W (0 se non disponibile)."""
@@ -164,7 +173,10 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             if current_val is None or int(current_val) != target:
                 await self._write_current(wb_number, target)
 
-        band = active_band(self.tariff_preset, dt_util.now())
+        now_local = dt_util.now()
+        scheme = self.tariff_scheme
+        holidays = holidays_for_scheme(scheme, now_local.year)
+        band = active_band(scheme, now_local, holidays)
 
         return {
             "per_source": per_source,
@@ -175,6 +187,7 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             "target_current": target,
             "charging_blocked": self.state.charging_blocked,
             "active_band": band,
+            "active_band_rank": scheme.rank_of(band),
             "reasons": list(self.state.reasons),
             "elapsed_s": elapsed,
             "balancing_enabled": self.balancing_enabled,

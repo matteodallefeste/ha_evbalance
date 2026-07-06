@@ -1,0 +1,22 @@
+{
+  "type": "tou",
+  "id": "pl_g12",
+  "country": "PL",
+  "label": "Polska — Taryfa G12 (dzienna/nocna)",
+  "source_url": "https://www.ure.gov.pl/pl/konsumenci/grupy-taryfowe",
+  "fallback": "dzienna",
+  "bands": [
+    { "id": "dzienna", "rank": 2, "label": "Strefa dzienna", "color": "#ef4444" },
+    { "id": "nocna", "rank": 1, "label": "Strefa nocna", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "nocna", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "06:00" },
+        { "band": "nocna", "days": [0, 1, 2, 3, 4, 5, 6], "start": "13:00", "end": "15:00" },
+        { "band": "nocna", "days": [0, 1, 2, 3, 4, 5, 6], "start": "22:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

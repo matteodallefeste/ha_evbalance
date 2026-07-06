@@ -1,0 +1,23 @@
+{
+  "type": "tou",
+  "id": "nl_dubbeltarief",
+  "country": "NL",
+  "label": "Nederland — Dubbeltarief (normaal/dal)",
+  "source_url": "https://www.acm.nl/nl/onderwerpen/energie/stroom-en-gas/energierekening",
+  "fallback": "normaal",
+  "holidays_as": "dal",
+  "bands": [
+    { "id": "normaal", "rank": 2, "label": "Normaaltarief", "color": "#ef4444" },
+    { "id": "dal", "rank": 1, "label": "Daltarief", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": null,
+      "rules": [
+        { "band": "dal", "days": [0, 1, 2, 3, 4], "start": "00:00", "end": "07:00" },
+        { "band": "dal", "days": [0, 1, 2, 3, 4], "start": "23:00", "end": "24:00" },
+        { "band": "dal", "days": [5, 6], "start": "00:00", "end": "24:00" }
+      ]
+    }
+  ]
+}

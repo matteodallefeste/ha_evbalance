@@ -1,0 +1,27 @@
+{
+  "type": "tou",
+  "id": "ie_nightsaver",
+  "country": "IE",
+  "label": "Ireland — Nightsaver (day/night)",
+  "source_url": "https://www.esbnetworks.ie/existing-connections/meters-and-readings/day-night-meters",
+  "fallback": "day",
+  "bands": [
+    { "id": "day", "rank": 2, "label": "Day", "color": "#ef4444" },
+    { "id": "night", "rank": 1, "label": "Night", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": [11, 12, 1, 2, 3],
+      "rules": [
+        { "band": "night", "days": [0, 1, 2, 3, 4, 5, 6], "start": "23:00", "end": "24:00" },
+        { "band": "night", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "08:00" }
+      ]
+    },
+    {
+      "months": [4, 5, 6, 7, 8, 9, 10],
+      "rules": [
+        { "band": "night", "days": [0, 1, 2, 3, 4, 5, 6], "start": "00:00", "end": "09:00" }
+      ]
+    }
+  ]
+}

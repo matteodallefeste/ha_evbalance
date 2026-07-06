@@ -1,0 +1,31 @@
+{
+  "type": "tou",
+  "id": "hr_vtnt",
+  "country": "HR",
+  "label": "Hrvatska — Viša / niža tarifa (VT/NT)",
+  "source_url": "https://www.hep.hr/elektra/kucanstvo/tarifne-stavke-cijene/1547",
+  "fallback": "vt",
+  "holidays_as": "nt",
+  "bands": [
+    { "id": "vt", "rank": 2, "label": "Viša tarifa", "color": "#ef4444" },
+    { "id": "nt", "rank": 1, "label": "Niža tarifa", "color": "#22c78b" }
+  ],
+  "seasons": [
+    {
+      "months": [11, 12, 1, 2, 3],
+      "rules": [
+        { "band": "nt", "days": [0, 1, 2, 3, 4], "start": "00:00", "end": "07:00" },
+        { "band": "nt", "days": [0, 1, 2, 3, 4], "start": "22:00", "end": "24:00" },
+        { "band": "nt", "days": [5, 6], "start": "00:00", "end": "24:00" }
+      ]
+    },
+    {
+      "months": [4, 5, 6, 7, 8, 9, 10],
+      "rules": [
+        { "band": "nt", "days": [0, 1, 2, 3, 4], "start": "00:00", "end": "08:00" },
+        { "band": "nt", "days": [0, 1, 2, 3, 4], "start": "23:00", "end": "24:00" },
+        { "band": "nt", "days": [5, 6], "start": "00:00", "end": "24:00" }
+      ]
+    }
+  ]
+}
