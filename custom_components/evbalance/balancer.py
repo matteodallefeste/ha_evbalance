@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Logica pura di bilanciamento energetico (indipendente da Home Assistant).
 
 Tenuta separata da coordinator/entity per essere facilmente testabile.

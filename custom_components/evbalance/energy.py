@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Fasce orarie (time-of-use) e utilità per il calcolo dell'energia.
 
 Le fasce sono "data-driven": un preset è una lista di regole valutate in

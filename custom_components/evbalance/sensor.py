@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Sensori di potenza, stato e energia (per sorgente, fascia e periodo)."""
 
 from __future__ import annotations

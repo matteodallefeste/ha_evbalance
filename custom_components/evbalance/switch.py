@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Switch per abilitare/disabilitare il bilanciamento."""
 
 from __future__ import annotations

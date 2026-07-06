@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Binary sensor: rischio sovraccarico / ricarica in pausa."""
 
 from __future__ import annotations

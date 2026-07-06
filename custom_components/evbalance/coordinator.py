@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Coordinator: legge le potenze, calcola il bilanciamento, attua sulla EV Charger."""
 
 from __future__ import annotations

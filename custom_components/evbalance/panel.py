@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Matteo Dalle Feste
+
 """Registrazione del pannello sidebar e comando websocket per EV Balance.
 
 Il pannello è un custom element servito come file JS statico (nessuno step di
