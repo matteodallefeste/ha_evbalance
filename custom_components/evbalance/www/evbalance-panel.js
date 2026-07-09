@@ -42,6 +42,7 @@ class EVBalancePanel extends HTMLElement {
     this._mode = "day"; // "day" | "month"
     this._monthOffset = 0; // 0 = mese corrente, 1 = precedente, ...
     this._statsLoading = false;
+    this._narrow = false; // vista stretta (mobile): sidebar nascosta
   }
 
   set hass(hass) {
@@ -52,6 +53,29 @@ class EVBalancePanel extends HTMLElement {
     } else if (this._meta) {
       this._updateLive();
     }
+  }
+
+  // Home Assistant assegna `narrow` quando la sidebar è collassata (mobile).
+  // Serve a decidere se mostrare il pulsante-menu che riapre la sidebar.
+  set narrow(value) {
+    this._narrow = value;
+    this._syncMenuButton();
+  }
+
+  get narrow() {
+    return this._narrow;
+  }
+
+  // Il pulsante-menu ha senso quando non c'è una sidebar sempre visibile:
+  // vista stretta oppure sidebar impostata su "always_hidden".
+  _showMenuButton() {
+    if (this._narrow) return true;
+    return this._hass && this._hass.dockedSidebar === "always_hidden";
+  }
+
+  _syncMenuButton() {
+    const btn = this.shadowRoot && this.shadowRoot.querySelector(".menu-btn");
+    if (btn) btn.style.display = this._showMenuButton() ? "" : "none";
   }
 
   get _t() {
@@ -352,7 +376,12 @@ class EVBalancePanel extends HTMLElement {
     this.shadowRoot.innerHTML = `
       ${this._styles()}
       <div class="wrap">
-        <h1>${this._meta.title || t.title}</h1>
+        <div class="topbar">
+          <button class="menu-btn" title="${t.menu || "Menu"}" aria-label="${t.menu || "Menu"}">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+          </button>
+          <h1>${this._meta.title || t.title}</h1>
+        </div>
 
         <section class="card">
           <h2>${t.live}</h2>
@@ -415,6 +444,20 @@ class EVBalancePanel extends HTMLElement {
     this._syncModeButtons();
     this._updateNav();
     this._wireSettings();
+
+    // Pulsante-menu: riapre la sidebar di Home Assistant. L'evento
+    // `hass-toggle-menu` è lo stesso emesso da <ha-menu-button> del frontend
+    // core; risale (bubbles/composed) fino a <home-assistant-main> che
+    // apre/chiude la sidebar.
+    const menuBtn = this.shadowRoot.querySelector(".menu-btn");
+    if (menuBtn) {
+      menuBtn.addEventListener("click", () => {
+        this.dispatchEvent(
+          new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true })
+        );
+      });
+    }
+    this._syncMenuButton();
   }
 
   // --- Sezione Impostazioni --------------------------------------------
@@ -947,6 +990,15 @@ class EVBalancePanel extends HTMLElement {
           font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
           color: var(--primary-text-color, #212121);
         }
+        .topbar { display:flex; align-items:center; gap:8px; margin: 8px 0 16px; }
+        .topbar h1 { margin: 0; }
+        .menu-btn {
+          flex: 0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+          width:40px; height:40px; padding:0; border:none; border-radius:50%;
+          background:transparent; color: var(--primary-text-color, #212121); cursor:pointer;
+        }
+        .menu-btn:hover { background: var(--secondary-background-color, rgba(0,0,0,.06)); }
+        .menu-btn svg { width:24px; height:24px; fill: currentColor; }
         h1 { font-size: 22px; font-weight: 600; margin: 8px 0 16px; }
         h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; opacity:.85; }
         .card {
