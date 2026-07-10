@@ -10,6 +10,45 @@ users.
 
 ## [Unreleased]
 
+## [26.7.13] - 2026-07-10
+
+### Added
+- The panel is now organized into three tabs — **Live**, **Statistics** and
+  **Settings** — instead of a single scrolling page.
+- Statistics are drawn with Apache ECharts, bundled locally in the integration
+  (`www/echarts.esm.min.js`, Apache-2.0) so there is **no external/CDN
+  dependency** at runtime. ECharts is imported lazily the first time the
+  Statistics tab is opened, and the charts follow the Home Assistant theme
+  colors. If the module fails to load, the panel falls back to CSS bars.
+- New Statistics metrics:
+  - **KPI tiles**: total energy for the period, share in the cheapest tariff
+    band, and (when EV statistics exist) EV energy and EV share of the total.
+  - **Stacked-by-band chart** over time — hourly for *Today*, daily for the
+    selected *Month*.
+  - **EV vs rest-of-home split** — a 100% bar showing how much of the period's
+    energy went to charging. The websocket `evbalance/panel` command now also
+    returns `band_stats_ev` (the per-band EV Charger statistic ids).
+  - **12-month trend** — stacked-by-band monthly totals, aggregated from the
+    daily statistics.
+- **Per-band €/kWh prices** for bill and EV-charging cost estimates. Set a price
+  per tariff band (and the currency symbol) in **Settings**; the Statistics tab
+  then shows **estimated cost** for the period and **EV charging cost** as KPI
+  tiles. Prices are stored in the config entry options (new `tariff_prices` map
+  and `currency`), apply to both presets and custom schemes, and are returned by
+  the `evbalance/panel` command as `band_prices`/`currency`. Cost tiles only
+  appear when at least one band has a price set.
+- Added the `statistics`, `statTotal`, `statCheapest`, `statEv`, `statEvShare`,
+  `statHouse`, `statTrend`, `statCost`, `statEvCost`, `pPrices` and `pCurrency`
+  translations for all five languages.
+
+### Fixed
+- Panel statistics: switching between months (e.g. June → July) showed the same
+  kWh for every band. The month view now aggregates the native daily statistics
+  (`change` per day) over the selected month and filters returned rows to the
+  requested `[start, end)` window, instead of relying on the monthly `change`
+  aggregation which could return out-of-window buckets (making every month look
+  identical). The current month stops at "now".
+
 ## [26.7.12] - 2026-07-10
 
 ### Fixed

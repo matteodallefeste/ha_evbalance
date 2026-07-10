@@ -30,6 +30,8 @@ CONF_HOLD_SECONDS = "hold_seconds"        # tempo minimo prima di rialzare la co
 CONF_UPDATE_INTERVAL = "update_interval"  # frequenza di lettura/attuazione (s)
 CONF_TARIFF_PRESET = "tariff_preset"      # id preset (es. "it_arera", "default") o "custom"
 CONF_TARIFFS = "tariffs"                  # definizione fasce (data-driven)
+CONF_TARIFF_PRICES = "tariff_prices"      # {band_id: prezzo €/kWh} per stima costi
+CONF_CURRENCY = "currency"                # simbolo valuta per la stima costi
 CONF_SHOW_PANEL = "show_panel"            # mostra il pannello nella sidebar
 
 # --- Default ---
@@ -43,6 +45,7 @@ DEFAULT_PAUSE_CURRENT = 0
 DEFAULT_HOLD_SECONDS = 300          # 5 minuti
 DEFAULT_UPDATE_INTERVAL = 3         # secondi
 DEFAULT_TARIFF_PRESET = "default"   # tariffa usata finché non se ne seleziona una
+DEFAULT_CURRENCY = "€"
 DEFAULT_SHOW_PANEL = True
 DEFAULT_SOURCES_INCLUDE_EV_CHARGER = False
 
@@ -58,5 +61,5 @@ PANEL_ICON = "mdi:ev-station"
 # fratello delle traduzioni tramite path relativo, quindi dev'essere raggiungibile.
 PANEL_STATIC_URL = "/evbalance_static"       # URL base (cartella www/)
 PANEL_JS_FILENAME = "evbalance-panel.js"     # modulo principale del pannello
-PANEL_JS_VERSION = "9"                         # bump per invalidare la cache del browser
+PANEL_JS_VERSION = "12"                        # bump per invalidare la cache del browser
 WS_TYPE_PANEL = "evbalance/panel"             # comando websocket usato dal pannello

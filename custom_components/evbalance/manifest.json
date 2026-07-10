@@ -9,5 +9,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/matteodallefeste/ha_evbalance/issues",
   "requirements": ["holidays"],
-  "version": "26.7.12"
+  "version": "26.7.13"
 }

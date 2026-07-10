@@ -42,11 +42,14 @@ from .const import (
     CONF_SOURCES,
     CONF_SOURCES_INCLUDE_EV_CHARGER,
     CONF_TARIFF_PRESET,
+    CONF_TARIFF_PRICES,
     CONF_TARIFFS,
+    CONF_CURRENCY,
     CONF_UPDATE_INTERVAL,
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
     CONF_EV_CHARGER_POWER,
+    DEFAULT_CURRENCY,
     DEFAULT_HOLD_SECONDS,
     DEFAULT_MAX_CURRENT,
     DEFAULT_MIN_CURRENT,
@@ -97,6 +100,8 @@ _OPTION_KEYS = (
     CONF_UPDATE_INTERVAL,
     CONF_TARIFF_PRESET,
     CONF_TARIFFS,
+    CONF_TARIFF_PRICES,
+    CONF_CURRENCY,
     CONF_SHOW_PANEL,
 )
 
@@ -176,17 +181,27 @@ def _ws_panel(
         for b in scheme.bands
     }
 
-    # Statistic_id dei sensori energia "totale casa" per fascia (periodo daily):
-    # basta un sensore total_increasing per fascia, i delta mensili si ottengono
-    # dalle long-term statistics via recorder/statistics_during_period.
+    # Statistic_id dei sensori energia per fascia (periodo daily): basta un
+    # sensore total_increasing per fascia, i delta storici si ottengono dalle
+    # long-term statistics via recorder/statistics_during_period. Esponiamo sia
+    # il "totale casa" sia la sola "EV Charger", così il pannello può mostrare
+    # la quota EV vs resto casa per fascia.
     band_stats: dict[str, str | None] = {}
+    band_stats_ev: dict[str, str | None] = {}
     for band in bands:
-        suffix = f"{slugify('total')}_{band.lower()}_daily_energy"
-        band_stats[band] = resolve("sensor", suffix)
+        band_stats[band] = resolve(
+            "sensor", f"{slugify('total')}_{band.lower()}_daily_energy"
+        )
+        band_stats_ev[band] = resolve(
+            "sensor", f"{slugify('ev_charger')}_{band.lower()}_daily_energy"
+        )
 
     max_power_w = None
     if coordinator is not None and coordinator.data:
         max_power_w = coordinator.data.get(CONF_MAX_POWER_W)
+
+    band_prices = dict(_entry_value(entry, CONF_TARIFF_PRICES, {}) or {})
+    currency = _entry_value(entry, CONF_CURRENCY, DEFAULT_CURRENCY)
 
     connection.send_result(
         msg["id"],
@@ -197,6 +212,9 @@ def _ws_panel(
             "band_meta": band_meta,
             "entities": entities,
             "band_stats": band_stats,
+            "band_stats_ev": band_stats_ev,
+            "band_prices": band_prices,
+            "currency": currency,
             "max_power_w": max_power_w,
         },
     )
@@ -241,6 +259,8 @@ def _current_config(entry) -> dict[str, Any]:
             entry, CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET
         ),
         CONF_TARIFFS: _entry_value(entry, CONF_TARIFFS, None),
+        CONF_TARIFF_PRICES: dict(_entry_value(entry, CONF_TARIFF_PRICES, {}) or {}),
+        CONF_CURRENCY: _entry_value(entry, CONF_CURRENCY, DEFAULT_CURRENCY),
         CONF_SHOW_PANEL: bool(_entry_value(entry, CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)),
     }
 
@@ -285,6 +305,19 @@ def _coerce(key: str, value: Any) -> Any:
         # ValueError -> il chiamante risponde "invalid_format".
         scheme_from_dict(value, scheme_id="custom")
         return value
+    if key == CONF_TARIFF_PRICES:
+        # {band_id: prezzo €/kWh}. Scarta valori vuoti/non numerici o negativi.
+        out: dict[str, float] = {}
+        for band, price in (value or {}).items():
+            if price in (None, ""):
+                continue
+            p = float(price)
+            if p < 0:
+                raise ValueError(f"prezzo negativo per {band!r}")
+            out[str(band)] = p
+        return out
+    if key == CONF_CURRENCY:
+        return str(value or DEFAULT_CURRENCY).strip() or DEFAULT_CURRENCY
     return value
 
 

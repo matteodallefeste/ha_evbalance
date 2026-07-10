@@ -195,7 +195,12 @@ class EVBalanceOptionsFlow(OptionsFlow):
             user_input[CONF_CURRENT_STEPS] = _parse_steps(
                 user_input.get(CONF_CURRENT_STEPS, "")
             )
-            return self.async_create_entry(title="", data=user_input)
+            # La OptionsFlow sostituisce l'intero dict options: preserva le chiavi
+            # gestite solo dal pannello (schema fasce custom, prezzi, valuta),
+            # altrimenti salvando da qui andrebbero perse.
+            merged = dict(self.entry.options)
+            merged.update(user_input)
+            return self.async_create_entry(title="", data=merged)
 
         schema = vol.Schema(
             {

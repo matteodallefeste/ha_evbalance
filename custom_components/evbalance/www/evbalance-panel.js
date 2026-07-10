@@ -6,8 +6,9 @@
  *     corrente concessa, stato carica, limite potenza), aggiornati a ogni
  *     assegnazione della property `hass`;
  *   - l'energia per fascia oraria letta dalle long-term statistics native via
- *     il comando core `recorder/statistics_during_period` (oggi a granularità
- *     oraria, i mesi passati a granularità mensile), navigabile all'indietro.
+ *     il comando core `recorder/statistics_during_period` (granularità oraria
+ *     per il giorno corrente, giornaliera sommata per i mesi), navigabile
+ *     all'indietro.
  *
  * I metadati (quali entità e quali statistic_id usare) arrivano dal comando
  * websocket `evbalance/panel`, così il frontend non deve indovinare gli id.
@@ -43,6 +44,22 @@ class EVBalancePanel extends HTMLElement {
     this._monthOffset = 0; // 0 = mese corrente, 1 = precedente, ...
     this._statsLoading = false;
     this._narrow = false; // vista stretta (mobile): sidebar nascosta
+    this._tab = "live"; // "live" | "stats" | "settings"
+    this._echarts = null; // modulo ECharts (import lazy alla prima apertura stats)
+    this._echartsLoading = false;
+    this._charts = {}; // istanze ECharts per elId (main, ev, trend)
+    this._trendLoaded = false; // il trend 12 mesi si carica una volta sola
+  }
+
+  connectedCallback() {
+    if (!this._onResize) this._onResize = () => this._resizeCharts();
+    window.addEventListener("resize", this._onResize);
+  }
+
+  disconnectedCallback() {
+    if (this._onResize) window.removeEventListener("resize", this._onResize);
+    Object.values(this._charts).forEach((c) => c && c.dispose());
+    this._charts = {};
   }
 
   set hass(hass) {
@@ -110,7 +127,8 @@ class EVBalancePanel extends HTMLElement {
     await this._loadConfig();
     this._render();
     this._updateLive();
-    this._loadStats();
+    // Le statistiche (e il modulo ECharts) si caricano alla prima apertura del
+    // relativo tab: vedi _openStats().
   }
 
   async _loadConfig() {
@@ -157,6 +175,18 @@ class EVBalancePanel extends HTMLElement {
       new Intl.NumberFormat(this._locale, {
         maximumFractionDigits: 2,
       }).format(kwh || 0) + " kWh"
+    );
+  }
+
+  _fmtMoney(amount) {
+    const cur = (this._meta && this._meta.currency) || "€";
+    return (
+      new Intl.NumberFormat(this._locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount || 0) +
+      " " +
+      cur
     );
   }
 
@@ -235,36 +265,9 @@ class EVBalancePanel extends HTMLElement {
     return { start, end };
   }
 
-  async _loadStats() {
-    if (!this._meta || this._statsLoading) return;
-    const stats = this._meta.band_stats || {};
-    const ids = Object.values(stats).filter(Boolean);
-    const chart = this.shadowRoot.getElementById("chart");
-    if (!chart) return;
-
-    if (ids.length === 0) {
-      chart.innerHTML = `<div class="empty">${this._t.noData}</div>`;
-      this._updateNav();
-      return;
-    }
-
-    this._statsLoading = true;
-    let start;
-    let end;
-    let period;
-    if (this._mode === "day") {
-      const now = new Date();
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      end = null; // fino a ora
-      period = "hour";
-    } else {
-      const r = this._monthRange(this._monthOffset);
-      start = r.start;
-      end = r.end;
-      period = "month";
-    }
-
-    let result = {};
+  // Richiesta statistiche core: `change` (delta) + `sum` (cumulata) per periodo.
+  async _fetchStats(ids, start, end, period) {
+    if (!ids.length) return {};
     try {
       const msg = {
         type: "recorder/statistics_during_period",
@@ -274,50 +277,471 @@ class EVBalancePanel extends HTMLElement {
         types: ["change", "sum"],
       };
       if (end) msg.end_time = end.toISOString();
-      result = await this._hass.callWS(msg);
+      return await this._hass.callWS(msg);
     } catch (err) {
-      result = {};
+      return {};
     }
+  }
+
+  // `start` di un bucket: timestamp ms (numero) o stringa ISO -> ms.
+  _rowMs(row) {
+    return typeof row.start === "number" ? row.start : Date.parse(row.start);
+  }
+
+  // Filtro che tiene solo i bucket dentro la finestra [start, end): HA può
+  // restituire bucket appena fuori dai limiti (e talvolta ignorare end_time).
+  _windowFilter(start, end) {
+    const startMs = start.getTime();
+    const endMs = end ? end.getTime() : Infinity;
+    return (row) => {
+      const s = this._rowMs(row);
+      return !Number.isFinite(s) || (s >= startMs && s < endMs);
+    };
+  }
+
+  async _loadStats() {
+    if (!this._meta || this._statsLoading) return;
+    const totalStats = this._meta.band_stats || {};
+    const evStats = this._meta.band_stats_ev || {};
+    const bands = this._meta.bands;
+    const chart = this.shadowRoot.getElementById("chart");
+    if (!chart) return;
+
+    const totalIds = Object.values(totalStats).filter(Boolean);
+    if (totalIds.length === 0) {
+      this._renderKpis(null);
+      chart.innerHTML = `<div class="empty">${this._t.noData}</div>`;
+      this._updateNav();
+      return;
+    }
+    const evIds = Object.values(evStats).filter(Boolean);
+    const hasEv = evIds.length > 0;
+    const ids = Array.from(new Set([...totalIds, ...evIds]));
+
+    // Finestra: oggi a granularità oraria, mese a granularità giornaliera
+    // (aggregando i "change" giorno per giorno). Il mese corrente si ferma a ora.
+    this._statsLoading = true;
+    const now = new Date();
+    let start;
+    let end;
+    let period;
+    if (this._mode === "day") {
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      end = null;
+      period = "hour";
+    } else {
+      const r = this._monthRange(this._monthOffset);
+      start = r.start;
+      end = r.end > now ? now : r.end;
+      period = "day";
+    }
+
+    const result = await this._fetchStats(ids, start, end, period);
     this._statsLoading = false;
 
-    // Somma il "change" (delta della somma nel periodo) per ogni fascia.
-    const totals = {};
-    for (const band of this._meta.bands) {
-      const sid = stats[band];
-      const rows = (sid && result[sid]) || [];
+    const inWindow = this._windowFilter(start, end);
+
+    // Per fascia: totale casa, totale EV e serie temporale impilata (casa).
+    const totalByBand = {};
+    const evByBand = {};
+    const perBandBucket = {}; // band -> Map(bucketMs -> kwh)
+    const bucketSet = new Set();
+    for (const band of bands) {
+      const m = new Map();
       let sum = 0;
-      let hasChange = false;
-      for (const row of rows) {
-        if (row.change != null) {
-          sum += Number(row.change) || 0;
-          hasChange = true;
-        }
+      const tRows = ((totalStats[band] && result[totalStats[band]]) || []).filter(inWindow);
+      for (const row of tRows) {
+        const v = Number(row.change) || 0;
+        const key = this._rowMs(row);
+        m.set(key, (m.get(key) || 0) + v);
+        bucketSet.add(key);
+        sum += v;
       }
-      if (!hasChange && rows.length >= 2) {
-        // Fallback: delta della somma cumulata agli estremi.
-        const first = Number(rows[0].sum);
-        const last = Number(rows[rows.length - 1].sum);
-        if (Number.isFinite(first) && Number.isFinite(last)) sum = last - first;
-      }
-      totals[band] = Math.max(0, sum);
+      perBandBucket[band] = m;
+      totalByBand[band] = Math.max(0, sum);
+
+      let esum = 0;
+      const eRows = ((evStats[band] && result[evStats[band]]) || []).filter(inWindow);
+      for (const row of eRows) esum += Number(row.change) || 0;
+      evByBand[band] = Math.max(0, esum);
     }
 
-    this._renderChart(totals);
+    const buckets = Array.from(bucketSet).sort((a, b) => a - b);
+    this._renderKpis(totalByBand, evByBand, hasEv);
+    this._renderMainChart(bands, buckets, perBandBucket, period);
+    this._renderEvSplit(totalByBand, evByBand, hasEv);
     this._updateNav();
   }
 
-  _renderChart(totals) {
+  // Passa al tab richiesto: attiva il bottone e mostra il pannello corrispondente.
+  _syncTabs() {
+    const root = this.shadowRoot;
+    root.querySelectorAll(".tab").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === this._tab);
+    });
+    root.querySelectorAll(".tabpanel").forEach((p) => {
+      p.style.display = p.dataset.panel === this._tab ? "" : "none";
+    });
+    // ECharts calcola le dimensioni solo su un contenitore visibile: al ritorno
+    // sul tab statistiche forza un resize di tutti i grafici.
+    if (this._tab === "stats") this._resizeCharts();
+  }
+
+  // Apertura del tab statistiche: carica ECharts (lazy), i dati della finestra
+  // corrente e — una volta sola — il trend 12 mesi.
+  async _openStats() {
+    await this._ensureECharts();
+    this._loadStats();
+    if (!this._trendLoaded) {
+      this._trendLoaded = true;
+      this._loadTrend();
+    }
+  }
+
+  // Import lazy del modulo ECharts vendorizzato in www/. Propaga la stessa
+  // versione di cache-busting (?v=) del pannello. In caso di errore il grafico
+  // ricade sulle barre CSS.
+  async _ensureECharts() {
+    if (this._echarts || this._echartsLoading) return;
+    this._echartsLoading = true;
+    try {
+      const url = new URL("./echarts.esm.min.js", import.meta.url);
+      const v = new URL(import.meta.url).searchParams.get("v");
+      if (v) url.searchParams.set("v", v);
+      this._echarts = await import(url.href);
+    } catch (err) {
+      this._echarts = null;
+    }
+    this._echartsLoading = false;
+  }
+
+  // --- Gestione istanze ECharts (main, ev, trend) ----------------------
+
+  _getChart(elId) {
+    const el = this.shadowRoot.getElementById(elId);
+    if (!el || !this._echarts) return null;
+    let inst = this._echarts.getInstanceByDom(el);
+    if (!inst) {
+      el.innerHTML = "";
+      inst = this._echarts.init(el);
+    }
+    this._charts[elId] = inst;
+    return inst;
+  }
+
+  _disposeChart(elId) {
+    const inst = this._charts[elId];
+    if (inst) {
+      inst.dispose();
+      delete this._charts[elId];
+    }
+  }
+
+  _resizeCharts() {
+    Object.values(this._charts).forEach((c) => c && c.resize());
+  }
+
+  // Colori di testo/assi/griglia dal tema Home Assistant.
+  _axisColors() {
+    const cs = getComputedStyle(this);
+    const v = (name, fb) => (cs.getPropertyValue(name) || "").trim() || fb;
+    const text = v("--primary-text-color", "#212121");
+    return {
+      text,
+      axis: v("--secondary-text-color", text),
+      grid: v("--divider-color", "rgba(127,127,127,.25)"),
+    };
+  }
+
+  // Opzioni comuni per un grafico a barre impilate per fascia (main + trend).
+  _stackedOption(xLabels, series, bands) {
+    const c = this._axisColors();
+    const nf = new Intl.NumberFormat(this._locale, { maximumFractionDigits: 2 });
+    return {
+      animationDuration: 400,
+      color: bands.map((b) => this._bandColor(b)),
+      legend: {
+        data: bands,
+        top: 0,
+        itemHeight: 10,
+        itemWidth: 14,
+        textStyle: { color: c.text },
+      },
+      grid: { left: 6, right: 12, top: 34, bottom: 4, containLabel: true },
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        valueFormatter: (v) => `${nf.format(v)} kWh`,
+      },
+      xAxis: {
+        type: "category",
+        data: xLabels,
+        axisLabel: { color: c.axis },
+        axisTick: { show: false },
+        axisLine: { lineStyle: { color: c.grid } },
+      },
+      yAxis: {
+        type: "value",
+        name: "kWh",
+        nameTextStyle: { color: c.axis, align: "left" },
+        axisLabel: { color: c.axis },
+        splitLine: { lineStyle: { color: c.grid } },
+      },
+      series,
+    };
+  }
+
+  _bucketLabel(ms, period) {
+    const d = new Date(ms);
+    return period === "hour"
+      ? String(d.getHours()).padStart(2, "0")
+      : String(d.getDate());
+  }
+
+  // Grafico principale: barre impilate per fascia lungo il periodo (ore oggi /
+  // giorni nel mese). Senza ECharts ricade sulle barre CSS aggregate.
+  _renderMainChart(bands, buckets, perBandBucket, period) {
+    const el = this.shadowRoot.getElementById("chart");
+    if (!el) return;
+    const anyData =
+      buckets.length > 0 &&
+      bands.some((b) => Array.from(perBandBucket[b].values()).some((v) => v > 0));
+
+    if (!this._echarts) {
+      const totals = {};
+      bands.forEach((b) => {
+        totals[b] = Array.from(perBandBucket[b].values()).reduce((a, c) => a + c, 0);
+      });
+      this._renderBars(totals, anyData);
+      return;
+    }
+
+    if (!anyData) {
+      this._disposeChart("chart");
+      el.innerHTML = `<div class="empty">${this._t.noData}</div>`;
+      return;
+    }
+
+    const inst = this._getChart("chart");
+    if (!inst) return;
+    const xLabels = buckets.map((ms) => this._bucketLabel(ms, period));
+    const series = bands.map((band) => ({
+      name: band,
+      type: "bar",
+      stack: "e",
+      itemStyle: { color: this._bandColor(band) },
+      emphasis: { focus: "series" },
+      data: buckets.map((ms) => Number((perBandBucket[band].get(ms) || 0).toFixed(3))),
+    }));
+    inst.setOption(this._stackedOption(xLabels, series, bands), true);
+    inst.resize();
+  }
+
+  // Tile KPI: totale periodo, quota nella fascia più economica, e (se ci sono
+  // statistiche EV) energia EV e quota EV sul totale.
+  _renderKpis(totalByBand, evByBand, hasEv) {
+    const el = this.shadowRoot.getElementById("stat-kpis");
+    if (!el) return;
+    const t = this._t;
+    if (!totalByBand) {
+      el.innerHTML = "";
+      return;
+    }
+    const bands = this._meta.bands;
+    const meta = this._meta.band_meta || {};
+    const total = bands.reduce((a, b) => a + (totalByBand[b] || 0), 0);
+
+    // Fascia più economica = rank minimo (1 = più economica).
+    let cheapest = null;
+    let minRank = Infinity;
+    for (const b of bands) {
+      const rank = meta[b] && meta[b].rank != null ? meta[b].rank : null;
+      if (rank != null && rank < minRank) {
+        minRank = rank;
+        cheapest = b;
+      }
+    }
+    const cheapKwh = cheapest ? totalByBand[cheapest] || 0 : 0;
+    const cheapPct = total > 0 ? Math.round((cheapKwh / total) * 100) : 0;
+    const evTotal = hasEv ? bands.reduce((a, b) => a + (evByBand[b] || 0), 0) : 0;
+    const evPct = total > 0 ? Math.round((evTotal / total) * 100) : 0;
+
+    const tiles = [
+      { k: t.statTotal, v: this._fmtEnergy(total) },
+      {
+        k: `${t.statCheapest}${cheapest ? ` (${cheapest})` : ""}`,
+        v: `${cheapPct}%`,
+      },
+    ];
+    if (hasEv) {
+      tiles.push({ k: t.statEv, v: this._fmtEnergy(evTotal) });
+      tiles.push({ k: t.statEvShare, v: `${evPct}%` });
+    }
+
+    // Stima costi: solo se almeno una fascia ha un prezzo €/kWh configurato.
+    const prices = this._meta.band_prices || {};
+    const hasPrice = bands.some((b) => Number(prices[b]) > 0);
+    if (hasPrice) {
+      const cost = bands.reduce(
+        (a, b) => a + (totalByBand[b] || 0) * (Number(prices[b]) || 0),
+        0
+      );
+      tiles.push({ k: t.statCost, v: this._fmtMoney(cost) });
+      if (hasEv) {
+        const evCost = bands.reduce(
+          (a, b) => a + (evByBand[b] || 0) * (Number(prices[b]) || 0),
+          0
+        );
+        tiles.push({ k: t.statEvCost, v: this._fmtMoney(evCost) });
+      }
+    }
+
+    el.innerHTML = tiles
+      .map(
+        (x) =>
+          `<div class="kpi"><span class="kpi-k">${x.k}</span><span class="kpi-v">${x.v}</span></div>`
+      )
+      .join("");
+  }
+
+  // Barra orizzontale 100%: quota EV vs resto casa sul periodo. Nascosta se non
+  // ci sono statistiche EV o non c'è consumo.
+  _renderEvSplit(totalByBand, evByBand, hasEv) {
+    const wrap = this.shadowRoot.getElementById("ev-wrap");
+    const el = this.shadowRoot.getElementById("chart-ev");
+    if (!wrap || !el) return;
+    const bands = this._meta.bands;
+    const evTotal = bands.reduce((a, b) => a + (evByBand[b] || 0), 0);
+    const total = bands.reduce((a, b) => a + (totalByBand[b] || 0), 0);
+    const house = Math.max(0, total - evTotal);
+
+    if (!hasEv || total <= 0) {
+      wrap.style.display = "none";
+      this._disposeChart("chart-ev");
+      return;
+    }
+    wrap.style.display = "";
+    if (!this._echarts) return;
+
+    const inst = this._getChart("chart-ev");
+    if (!inst) return;
+    const t = this._t;
+    const c = this._axisColors();
+    const nf = new Intl.NumberFormat(this._locale, { maximumFractionDigits: 2 });
+    const pct = (x) => Math.round((x / total) * 100);
+    inst.setOption(
+      {
+        animationDuration: 400,
+        grid: { left: 2, right: 2, top: 2, bottom: 2 },
+        tooltip: { trigger: "item", valueFormatter: (v) => `${nf.format(v)} kWh` },
+        xAxis: { type: "value", show: false, max: total },
+        yAxis: { type: "category", show: false, data: [""] },
+        series: [
+          {
+            name: t.statEv,
+            type: "bar",
+            stack: "s",
+            data: [Number(evTotal.toFixed(3))],
+            itemStyle: { color: "#29c7b0", borderRadius: [6, 0, 0, 6] },
+            label: {
+              show: evTotal > 0,
+              formatter: `${t.statEv} ${pct(evTotal)}%`,
+              color: "#fff",
+              fontWeight: 700,
+            },
+          },
+          {
+            name: t.statHouse,
+            type: "bar",
+            stack: "s",
+            data: [Number(house.toFixed(3))],
+            itemStyle: { color: "rgba(127,127,127,.35)", borderRadius: [0, 6, 6, 0] },
+            label: {
+              show: house > 0,
+              formatter: `${t.statHouse} ${pct(house)}%`,
+              color: c.text,
+              fontWeight: 700,
+            },
+          },
+        ],
+      },
+      true
+    );
+    inst.resize();
+  }
+
+  // Trend 12 mesi: barre impilate per fascia, aggregando i "change" giornalieri
+  // per mese (robusto: non dipende dal change mensile nativo). Indipendente dal
+  // toggle giorno/mese.
+  async _loadTrend() {
+    if (!this._meta) return;
+    const totalStats = this._meta.band_stats || {};
+    const bands = this._meta.bands;
+    const el = this.shadowRoot.getElementById("chart-trend");
+    if (!el) return;
+    const ids = Object.values(totalStats).filter(Boolean);
+    if (ids.length === 0) {
+      el.innerHTML = `<div class="empty">${this._t.noData}</div>`;
+      return;
+    }
+
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - 11, 1, 0, 0, 0);
+    const result = await this._fetchStats(ids, start, null, "day");
+
+    const months = [];
+    const idx = new Map();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - 11 + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      months.push(d);
+      idx.set(key, i);
+    }
+    const perBand = {};
+    bands.forEach((b) => (perBand[b] = new Array(12).fill(0)));
+    const inWindow = this._windowFilter(start, null);
+    for (const band of bands) {
+      const rows = ((totalStats[band] && result[totalStats[band]]) || []).filter(inWindow);
+      for (const row of rows) {
+        const d = new Date(this._rowMs(row));
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const i = idx.get(key);
+        if (i != null) perBand[band][i] += Number(row.change) || 0;
+      }
+    }
+
+    const anyData = bands.some((b) => perBand[b].some((v) => v > 0));
+    if (!this._echarts || !anyData) {
+      this._disposeChart("chart-trend");
+      el.innerHTML = anyData ? "" : `<div class="empty">${this._t.noData}</div>`;
+      return;
+    }
+    const inst = this._getChart("chart-trend");
+    if (!inst) return;
+    const xLabels = months.map((d) =>
+      d.toLocaleDateString(this._locale, { month: "short" })
+    );
+    const series = bands.map((band) => ({
+      name: band,
+      type: "bar",
+      stack: "e",
+      itemStyle: { color: this._bandColor(band) },
+      data: perBand[band].map((v) => Number(Math.max(0, v).toFixed(3))),
+    }));
+    inst.setOption(this._stackedOption(xLabels, series, bands), true);
+    inst.resize();
+  }
+
+  // Fallback dependency-free: barre CSS orizzontali (usato se ECharts non carica).
+  _renderBars(totals, anyData) {
     const chart = this.shadowRoot.getElementById("chart");
     if (!chart) return;
     const bands = this._meta.bands;
-    const max = Math.max(1e-6, ...bands.map((b) => totals[b] || 0));
-    const anyData = bands.some((b) => (totals[b] || 0) > 0);
-
     if (!anyData) {
       chart.innerHTML = `<div class="empty">${this._t.noData}</div>`;
       return;
     }
-
+    const max = Math.max(1e-6, ...bands.map((b) => totals[b] || 0));
     const rows = bands
       .map((b) => {
         const val = totals[b] || 0;
@@ -333,7 +757,7 @@ class EVBalancePanel extends HTMLElement {
           </div>`;
       })
       .join("");
-    chart.innerHTML = rows;
+    chart.innerHTML = `<div class="bars">${rows}</div>`;
   }
 
   _updateNav() {
@@ -383,44 +807,74 @@ class EVBalancePanel extends HTMLElement {
           <h1>${this._meta.title || t.title}</h1>
         </div>
 
-        <section class="card">
-          <h2>${t.live}</h2>
-          <div class="tiles">
-            <div class="tile"><span class="k">${t.house}</span><span class="val" id="v-house">—</span></div>
-            <div class="tile"><span class="k">${t.evCharger}</span><span class="val" id="v-evCharger">—</span></div>
-            <div class="tile"><span class="k">${t.total}</span><span class="val" id="v-total">—</span></div>
-            <div class="tile"><span class="k">${t.maxCurrent}</span><span class="val" id="v-current">—</span></div>
-            <div class="tile"><span class="k">${t.powerLimit}</span><span class="val" id="v-limit">—</span></div>
-            <div class="tile">
-              <span class="k">${t.chargeState}</span>
-              <span class="badge idle" id="v-charge">—</span>
-              <span class="chip" id="v-band">—</span>
+        <div class="tabs" role="tablist">
+          <button class="tab" data-tab="live" role="tab">${t.live}</button>
+          <button class="tab" data-tab="stats" role="tab">${t.statistics || t.energyByBand}</button>
+          <button class="tab" data-tab="settings" role="tab">${t.settings}</button>
+        </div>
+
+        <section class="tabpanel" data-panel="live">
+          <section class="card">
+            <div class="tiles">
+              <div class="tile"><span class="k">${t.house}</span><span class="val" id="v-house">—</span></div>
+              <div class="tile"><span class="k">${t.evCharger}</span><span class="val" id="v-evCharger">—</span></div>
+              <div class="tile"><span class="k">${t.total}</span><span class="val" id="v-total">—</span></div>
+              <div class="tile"><span class="k">${t.maxCurrent}</span><span class="val" id="v-current">—</span></div>
+              <div class="tile"><span class="k">${t.powerLimit}</span><span class="val" id="v-limit">—</span></div>
+              <div class="tile">
+                <span class="k">${t.chargeState}</span>
+                <span class="badge idle" id="v-charge">—</span>
+                <span class="chip" id="v-band">—</span>
+              </div>
+              <div class="tile">
+                <span class="k">${t.balancing}</span>
+                <span class="badge idle" id="v-balancing">—</span>
+              </div>
             </div>
-            <div class="tile">
-              <span class="k">${t.balancing}</span>
-              <span class="badge idle" id="v-balancing">—</span>
-            </div>
-          </div>
+          </section>
         </section>
 
-        <section class="card">
-          <div class="chart-head">
-            <h2>${t.energyByBand}</h2>
-            <div class="modes">
-              <button class="mode" data-mode="day">${t.today}</button>
-              <button class="mode" data-mode="month">${t.month}</button>
+        <section class="tabpanel" data-panel="stats" style="display:none">
+          <section class="card">
+            <div class="chart-head">
+              <h2>${t.energyByBand}</h2>
+              <div class="modes">
+                <button class="mode" data-mode="day">${t.today}</button>
+                <button class="mode" data-mode="month">${t.month}</button>
+              </div>
             </div>
-          </div>
-          <div class="nav">
-            <button id="nav-prev" class="navbtn">◀</button>
-            <span id="period-label"></span>
-            <button id="nav-next" class="navbtn">▶</button>
-          </div>
-          <div id="chart" class="chart"><div class="empty">${t.loading}</div></div>
+            <div class="nav">
+              <button id="nav-prev" class="navbtn">◀</button>
+              <span id="period-label"></span>
+              <button id="nav-next" class="navbtn">▶</button>
+            </div>
+            <div id="stat-kpis" class="kpis"></div>
+            <div id="chart" class="chart"><div class="empty">${t.loading}</div></div>
+            <div id="ev-wrap" class="ev-wrap" style="display:none">
+              <div class="sub-h">${t.statEv} · ${t.statHouse}</div>
+              <div id="chart-ev" class="chart-ev"></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="chart-head"><h2>${t.statTrend}</h2></div>
+            <div id="chart-trend" class="chart-trend"><div class="empty">${t.loading}</div></div>
+          </section>
         </section>
 
-        ${this._settingsSection()}
+        <section class="tabpanel" data-panel="settings" style="display:none">
+          ${this._settingsSection()}
+        </section>
       </div>`;
+
+    // Handler dei tab.
+    this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this._tab = btn.dataset.tab;
+        this._syncTabs();
+        if (this._tab === "stats") this._openStats();
+      });
+    });
 
     // Handler modalità e navigazione.
     this.shadowRoot.querySelectorAll(".mode").forEach((btn) => {
@@ -442,6 +896,7 @@ class EVBalancePanel extends HTMLElement {
       }
     });
     this._syncModeButtons();
+    this._syncTabs();
     this._updateNav();
     this._wireSettings();
 
@@ -564,8 +1019,8 @@ class EVBalancePanel extends HTMLElement {
     if (!this._config) return "";
     const bal = this._balancingControl();
     if (!this._canEdit) {
-      return `<details class="card settings"><summary>${t.settings}</summary>
-        ${bal}<div class="hint">${t.noAdmin}</div></details>`;
+      return `<section class="card settings"><h2>${t.settings}</h2>
+        ${bal}<div class="hint">${t.noAdmin}</div></section>`;
     }
 
     const c = this._config;
@@ -602,6 +1057,8 @@ class EVBalancePanel extends HTMLElement {
 
         ${this._tariffSection(c)}
 
+        ${this._pricesSection(c)}
+
         <label class="cb-row single wide">
           <input type="checkbox" id="cfg-show_panel" ${
             c.show_panel ? "checked" : ""
@@ -612,7 +1069,37 @@ class EVBalancePanel extends HTMLElement {
         <span id="save-status" class="save-status"></span>
       </div>`;
 
-    return `<details class="card settings"><summary>${t.settings}</summary>${bal}${body}</details>`;
+    return `<section class="card settings"><h2>${t.settings}</h2>${bal}${body}</section>`;
+  }
+
+  // Prezzi €/kWh per fascia (per la stima costi nel tab Statistiche). Le fasce
+  // sono quelle dello schema attivo; i prezzi valgono sia per i preset sia per
+  // lo schema custom e sono indipendenti dalla tariffa selezionata.
+  _pricesSection(c) {
+    const t = this._t;
+    const bands = (this._meta && this._meta.bands) || [];
+    if (!bands.length) return "";
+    const prices = (c && c.tariff_prices) || {};
+    const meta = (this._meta && this._meta.band_meta) || {};
+    const rows = bands
+      .map((b) => {
+        const color = this._bandColor(b);
+        const val = prices[b] != null ? prices[b] : "";
+        const label = (meta[b] && meta[b].label) || b;
+        const tag = label && label !== b ? `${b} · ${this._esc(label)}` : b;
+        return `<label class="field">
+          <span style="color:${color}">${tag}</span>
+          <input class="price-in" data-band="${this._esc(b)}" type="number"
+            step="0.001" min="0" value="${val}" placeholder="0.000"></label>`;
+      })
+      .join("");
+    return `<div class="prices-box wide">
+      <div class="sub">${t.pPrices}</div>
+      <label class="field cur"><span>${t.pCurrency}</span>
+        <input id="cfg-currency" type="text" maxlength="4"
+          value="${this._esc((c && c.currency) || "€")}"></label>
+      <div class="form-grid">${rows}</div>
+    </div>`;
   }
 
   _wireSettings() {
@@ -659,8 +1146,22 @@ class EVBalancePanel extends HTMLElement {
       update_interval: Number(g("cfg-update_interval").value),
       tariff_preset: tariffPreset,
       tariffs: tariffPreset === "custom" ? this._buildTariffPayload() : null,
+      tariff_prices: this._readPrices(),
+      currency: (g("cfg-currency").value || "€").trim() || "€",
       show_panel: g("cfg-show_panel").checked,
     };
+  }
+
+  _readPrices() {
+    const prices = {};
+    this.shadowRoot.querySelectorAll(".price-in").forEach((inp) => {
+      const v = inp.value.trim();
+      if (v !== "") {
+        const n = Number(v);
+        if (Number.isFinite(n) && n >= 0) prices[inp.dataset.band] = n;
+      }
+    });
+    return prices;
   }
 
   async _save() {
@@ -688,6 +1189,7 @@ class EVBalancePanel extends HTMLElement {
         this._meta = await this._hass.callWS({ type: "evbalance/panel" });
         this._updateLive();
         this._loadStats();
+        this._loadTrend();
       } catch (err) {
         /* non bloccante */
       }
@@ -1001,6 +1503,17 @@ class EVBalancePanel extends HTMLElement {
         .menu-btn svg { width:24px; height:24px; fill: currentColor; }
         h1 { font-size: 22px; font-weight: 600; margin: 8px 0 16px; }
         h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; opacity:.85; }
+        .tabs {
+          display:flex; gap:4px; margin-bottom:16px;
+          border-bottom:1px solid var(--divider-color, #e0e0e0);
+        }
+        .tab {
+          border:none; background:transparent; cursor:pointer; padding:10px 16px;
+          font-size:14px; font-weight:600; color:inherit; opacity:.6;
+          border-bottom:2px solid transparent; margin-bottom:-1px;
+        }
+        .tab:hover { opacity:.9; }
+        .tab.active { opacity:1; color:#29c7b0; border-bottom-color:#29c7b0; }
         .card {
           background: var(--card-background-color, #fff);
           border-radius: 14px; padding: 16px; margin-bottom: 16px;
@@ -1028,7 +1541,17 @@ class EVBalancePanel extends HTMLElement {
         .navbtn { border:none; background:transparent; cursor:pointer; font-size:16px; color:inherit; opacity:.7; }
         .navbtn:hover { opacity:1; }
         #period-label { font-size:14px; font-weight:600; min-width:160px; text-align:center; text-transform:capitalize; }
-        .chart { display:flex; flex-direction:column; gap:12px; min-height:60px; }
+        .kpis { display:grid; grid-template-columns: repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-bottom:14px; }
+        .kpi { display:flex; flex-direction:column; gap:4px; padding:10px 12px;
+          border-radius:10px; background: var(--secondary-background-color, #f4f5f7); }
+        .kpi-k { font-size:11px; opacity:.7; }
+        .kpi-v { font-size:18px; font-weight:700; }
+        .chart { height:320px; }
+        .ev-wrap { margin-top:14px; }
+        .sub-h { font-size:12px; font-weight:600; opacity:.7; margin-bottom:6px; }
+        .chart-ev { height:34px; }
+        .chart-trend { height:280px; }
+        .bars { display:flex; flex-direction:column; gap:12px; padding-top:8px; }
         .bar-row { display:grid; grid-template-columns: 34px 1fr auto; align-items:center; gap:10px; }
         .bar-label { font-weight:700; font-size:13px; }
         .bar-track { height:14px; border-radius:999px; background: var(--secondary-background-color,#eee); overflow:hidden; }
@@ -1037,16 +1560,7 @@ class EVBalancePanel extends HTMLElement {
         .empty { opacity:.6; font-size:14px; text-align:center; padding:16px 0; }
         .msg { padding:32px; text-align:center; opacity:.7; }
 
-        details.settings { padding:0; }
-        details.settings > summary {
-          list-style:none; cursor:pointer; padding:16px; font-size:15px; font-weight:600;
-          opacity:.85; display:flex; align-items:center; gap:8px;
-        }
-        details.settings > summary::-webkit-details-marker { display:none; }
-        details.settings > summary::before { content:"⚙"; font-size:16px; opacity:.8; }
-        details.settings[open] > summary { border-bottom:1px solid var(--divider-color,#e0e0e0); margin-bottom:12px; }
-        details.settings > *:not(summary) { padding:0 16px; }
-        details.settings > .hint { padding-bottom:16px; }
+        .card.settings h2::before { content:"⚙ "; opacity:.8; }
         .form-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
         .field { display:flex; flex-direction:column; gap:6px; }
         .field.wide { grid-column:1 / -1; }
@@ -1072,7 +1586,7 @@ class EVBalancePanel extends HTMLElement {
           padding-bottom:14px; border-bottom:1px solid var(--divider-color,#e0e0e0);
         }
         .ctl-row input { width:18px; height:18px; }
-        .save-row { display:flex; align-items:center; gap:14px; padding:16px; }
+        .save-row { display:flex; align-items:center; gap:14px; padding:8px 0 0; }
         .save-btn {
           border:none; cursor:pointer; padding:9px 20px; border-radius:999px;
           font-size:14px; font-weight:600; background:#29c7b0; color:#fff;
@@ -1082,11 +1596,18 @@ class EVBalancePanel extends HTMLElement {
         .save-status.ok { color:#22c78b; }
         .save-status.err { color:#ef4444; }
 
-        .tariff-box {
+        .tariff-box, .prices-box {
           grid-column:1 / -1; margin-top:6px; padding:12px; border-radius:10px;
           border:1px solid var(--divider-color,#e0e0e0);
           background: var(--secondary-background-color,#f7f8fa);
           display:flex; flex-direction:column; gap:8px;
+        }
+        .prices-box .sub { font-size:12px; font-weight:600; opacity:.7; }
+        .prices-box .field.cur { max-width:120px; }
+        .prices-box .price-in {
+          padding:8px 10px; border-radius:8px; font-size:14px; color:inherit;
+          border:1px solid var(--divider-color,#d0d0d0);
+          background: var(--card-background-color,#fff);
         }
         .tariff-box .sub { font-size:12px; font-weight:600; opacity:.7; margin-top:6px; }
         .tariff-box .dup-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
