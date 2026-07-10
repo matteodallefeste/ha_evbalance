@@ -10,6 +10,15 @@ users.
 
 ## [Unreleased]
 
+## [26.7.12] - 2026-07-10
+
+### Fixed
+- The sidebar panel now shows a hamburger menu button that reopens the Home
+  Assistant navigation. On narrow/mobile view (where the sidebar is hidden)
+  there was previously no way back to the main menu. The button fires the core
+  `hass-toggle-menu` event and appears only when needed (narrow view or a
+  hidden sidebar). Added the `menu` translation for all five languages.
+
 ## [26.7.9] - 2026-07-03
 
 ### Changed
