@@ -1093,12 +1093,45 @@ class EVBalancePanel extends HTMLElement {
             step="0.001" min="0" value="${val}" placeholder="0.000"></label>`;
       })
       .join("");
+    const cur = (c && c.currency) || "€";
     return `<div class="prices-box wide">
       <div class="sub">${t.pPrices}</div>
       <label class="field cur"><span>${t.pCurrency}</span>
         <input id="cfg-currency" type="text" maxlength="4"
-          value="${this._esc((c && c.currency) || "€")}"></label>
+          value="${this._esc(cur)}"></label>
       <div class="form-grid">${rows}</div>
+      ${this._calcBlock(t, cur)}
+    </div>`;
+  }
+
+  // Calcolatore prezzo medio: importo bolletta / kWh -> €/kWh, con opzione di
+  // leggere i kWh dai consumi tracciati per un mese; "Applica" compila i prezzi.
+  _calcBlock(t, cur) {
+    const now = new Date();
+    const opts = [];
+    for (let i = 0; i < 13; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const label = d.toLocaleDateString(this._locale, {
+        month: "long",
+        year: "numeric",
+      });
+      opts.push(`<option value="${i}">${label}</option>`);
+    }
+    return `<div class="calc">
+      <div class="sub">${t.cTitle}</div>
+      <div class="calc-row">
+        <label class="field"><span>${t.cAmount} (${this._esc(cur)})</span>
+          <input id="calc-amount" type="number" step="0.01" min="0" placeholder="0.00"></label>
+        <label class="field"><span>kWh</span>
+          <input id="calc-kwh" type="number" step="0.1" min="0" placeholder="0"></label>
+        <label class="field"><span>${t.cPeriod}</span>
+          <select id="calc-period">${opts.join("")}</select></label>
+        <button type="button" id="calc-read" class="mini">${t.cRead}</button>
+      </div>
+      <div class="calc-out">
+        <span>${t.cAvg}: <b id="calc-result">—</b></span>
+        <button type="button" id="calc-apply" class="mini" disabled>${t.cApply}</button>
+      </div>
     </div>`;
   }
 
@@ -1110,6 +1143,78 @@ class EVBalancePanel extends HTMLElement {
       bal.addEventListener("change", (e) => this._toggleBalancing(e.target.checked));
     }
     this._wireTariff();
+    this._wireCalc();
+  }
+
+  _wireCalc() {
+    const root = this.shadowRoot;
+    const amount = root.getElementById("calc-amount");
+    const kwh = root.getElementById("calc-kwh");
+    const read = root.getElementById("calc-read");
+    const apply = root.getElementById("calc-apply");
+    if (!amount || !kwh) return;
+    this._calcAvg = null;
+    amount.addEventListener("input", () => this._updateCalc());
+    kwh.addEventListener("input", () => this._updateCalc());
+    if (read) read.addEventListener("click", () => this._calcReadPeriod());
+    if (apply) apply.addEventListener("click", () => this._calcApply());
+  }
+
+  _updateCalc() {
+    const root = this.shadowRoot;
+    const amt = Number(root.getElementById("calc-amount").value);
+    const kwh = Number(root.getElementById("calc-kwh").value);
+    const res = root.getElementById("calc-result");
+    const apply = root.getElementById("calc-apply");
+    const curEl = root.getElementById("cfg-currency");
+    const cur =
+      (curEl && curEl.value.trim()) || (this._config && this._config.currency) || "€";
+    if (amt > 0 && kwh > 0) {
+      this._calcAvg = amt / kwh;
+      res.textContent = `${new Intl.NumberFormat(this._locale, {
+        maximumFractionDigits: 4,
+      }).format(this._calcAvg)} ${cur}/kWh`;
+      if (apply) apply.disabled = false;
+    } else {
+      this._calcAvg = null;
+      res.textContent = "—";
+      if (apply) apply.disabled = true;
+    }
+  }
+
+  // Legge dai consumi tracciati (sensori "totale casa" per fascia) i kWh del mese
+  // selezionato e li mette nel campo kWh del calcolatore.
+  async _calcReadPeriod() {
+    if (!this._meta) return;
+    const root = this.shadowRoot;
+    const read = root.getElementById("calc-read");
+    const offset = Number(root.getElementById("calc-period").value) || 0;
+    const ids = Object.values(this._meta.band_stats || {}).filter(Boolean);
+    if (!ids.length) return;
+    const r = this._monthRange(offset);
+    const now = new Date();
+    const end = r.end > now ? now : r.end;
+    if (read) read.disabled = true;
+    const result = await this._fetchStats(ids, r.start, end, "day");
+    const inWindow = this._windowFilter(r.start, end);
+    let kwh = 0;
+    for (const band of this._meta.bands) {
+      const sid = this._meta.band_stats[band];
+      const rows = ((sid && result[sid]) || []).filter(inWindow);
+      for (const row of rows) kwh += Number(row.change) || 0;
+    }
+    root.getElementById("calc-kwh").value = Math.round(Math.max(0, kwh) * 10) / 10;
+    if (read) read.disabled = false;
+    this._updateCalc();
+  }
+
+  // Compila tutti i campi prezzo con il prezzo medio calcolato (prezzo piatto).
+  _calcApply() {
+    if (this._calcAvg == null) return;
+    const v = Number(this._calcAvg.toFixed(4));
+    this.shadowRoot.querySelectorAll(".price-in").forEach((inp) => {
+      inp.value = v;
+    });
   }
 
   async _toggleBalancing(on) {
@@ -1609,6 +1714,21 @@ class EVBalancePanel extends HTMLElement {
           border:1px solid var(--divider-color,#d0d0d0);
           background: var(--card-background-color,#fff);
         }
+        .calc {
+          margin-top:10px; padding-top:10px; display:flex; flex-direction:column; gap:8px;
+          border-top:1px solid var(--divider-color,#e0e0e0);
+        }
+        .calc-row { display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap; }
+        .calc-row .field { flex:1 1 120px; gap:6px; }
+        .calc-row input, .calc-row select {
+          padding:8px 10px; border-radius:8px; font-size:14px; color:inherit;
+          border:1px solid var(--divider-color,#d0d0d0);
+          background: var(--card-background-color,#fff);
+        }
+        .calc-row .mini { flex:0 0 auto; }
+        .calc-out { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:14px; }
+        .calc-out b { font-size:15px; }
+        .mini:disabled { opacity:.5; cursor:default; }
         .tariff-box .sub { font-size:12px; font-weight:600; opacity:.7; margin-top:6px; }
         .tariff-box .dup-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
         .tariff-box .dup-row .hint { flex:1 1 auto; min-width:120px; }

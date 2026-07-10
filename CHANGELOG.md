@@ -37,9 +37,15 @@ users.
   and `currency`), apply to both presets and custom schemes, and are returned by
   the `evbalance/panel` command as `band_prices`/`currency`. Cost tiles only
   appear when at least one band has a price set.
+- **Average-price calculator** in the prices section: enter the bill amount and
+  the kWh to get the average €/kWh, then apply it as a flat price to every band.
+  The kWh can be typed from the bill or read from the tracked consumption for a
+  chosen month (note: the tracked total may cover only the configured sources,
+  not the whole-house meter, so the manual figure is more accurate).
 - Added the `statistics`, `statTotal`, `statCheapest`, `statEv`, `statEvShare`,
-  `statHouse`, `statTrend`, `statCost`, `statEvCost`, `pPrices` and `pCurrency`
-  translations for all five languages.
+  `statHouse`, `statTrend`, `statCost`, `statEvCost`, `pPrices`, `pCurrency`,
+  `cTitle`, `cAmount`, `cPeriod`, `cRead`, `cAvg` and `cApply` translations for
+  all five languages.
 
 ### Fixed
 - Panel statistics: switching between months (e.g. June → July) showed the same
