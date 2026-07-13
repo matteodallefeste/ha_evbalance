@@ -49,7 +49,10 @@ from .const import (
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
     CONF_EV_CHARGER_POWER,
+    CONF_EV_CHARGER_SWITCH,
+    CONF_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_CURRENCY,
+    DEFAULT_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_HOLD_SECONDS,
     DEFAULT_MAX_CURRENT,
     DEFAULT_MIN_CURRENT,
@@ -92,6 +95,8 @@ _DATA_KEYS = (
     CONF_MAX_CURRENT,
 )
 _OPTION_KEYS = (
+    CONF_EV_CHARGER_SWITCH,
+    CONF_EV_CHARGER_SWITCH_INVERT,
     CONF_SOURCES,
     CONF_SOURCES_INCLUDE_EV_CHARGER,
     CONF_SAFETY_MARGIN_W,
@@ -115,7 +120,11 @@ _INT_KEYS = (
     CONF_UPDATE_INTERVAL,
 )
 _FLOAT_KEYS = (CONF_MAX_POWER_W, CONF_VOLTAGE, CONF_SAFETY_MARGIN_W)
-_BOOL_KEYS = (CONF_SOURCES_INCLUDE_EV_CHARGER, CONF_SHOW_PANEL)
+_BOOL_KEYS = (
+    CONF_SOURCES_INCLUDE_EV_CHARGER,
+    CONF_EV_CHARGER_SWITCH_INVERT,
+    CONF_SHOW_PANEL,
+)
 
 # unique_id (senza prefisso entry_id) -> dominio piattaforma, per le entità live.
 _LIVE_ENTITIES: dict[str, str] = {
@@ -236,6 +245,12 @@ def _current_config(entry) -> dict[str, Any]:
         CONF_NAME: entry.title,
         CONF_EV_CHARGER_POWER: _entry_value(entry, CONF_EV_CHARGER_POWER, None),
         CONF_EV_CHARGER_CURRENT: _entry_value(entry, CONF_EV_CHARGER_CURRENT, None),
+        CONF_EV_CHARGER_SWITCH: _entry_value(entry, CONF_EV_CHARGER_SWITCH, None),
+        CONF_EV_CHARGER_SWITCH_INVERT: bool(
+            _entry_value(
+                entry, CONF_EV_CHARGER_SWITCH_INVERT, DEFAULT_EV_CHARGER_SWITCH_INVERT
+            )
+        ),
         CONF_MAX_POWER_W: _entry_value(entry, CONF_MAX_POWER_W, 3300),
         CONF_VOLTAGE: _entry_value(entry, CONF_VOLTAGE, DEFAULT_VOLTAGE),
         CONF_PHASES: int(_entry_value(entry, CONF_PHASES, DEFAULT_PHASES)),

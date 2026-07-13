@@ -944,6 +944,18 @@ class EVBalancePanel extends HTMLElement {
       .sort();
   }
 
+  _switchEntities() {
+    const st = this._hass.states;
+    const own = this._ownEntityIds();
+    return Object.keys(st)
+      .filter(
+        (id) =>
+          (id.startsWith("switch.") || id.startsWith("input_boolean.")) &&
+          !own.has(id)
+      )
+      .sort();
+  }
+
   _friendly(id) {
     const st = this._hass.states[id];
     return (st && st.attributes && st.attributes.friendly_name) || id;
@@ -1033,6 +1045,11 @@ class EVBalancePanel extends HTMLElement {
 
         ${this._fieldEntity("ev_charger_power_entity", t.fEvChargerPower, this._powerSensors())}
         ${this._fieldEntity("ev_charger_current_entity", t.fEvChargerCurrent, this._numberEntities())}
+        ${this._fieldEntity("ev_charger_switch_entity", t.fEvChargerSwitch, this._switchEntities())}
+        <label class="cb-row single wide">
+          <input type="checkbox" id="cfg-ev_charger_switch_invert" ${
+            c.ev_charger_switch_invert ? "checked" : ""
+          }><span>${t.fEvChargerSwitchInvert}</span></label>
 
         ${this._fieldSources(t.fSources)}
         <label class="cb-row single wide">
@@ -1238,6 +1255,8 @@ class EVBalancePanel extends HTMLElement {
       name: g("cfg-name").value.trim(),
       ev_charger_power_entity: g("cfg-ev_charger_power_entity").value,
       ev_charger_current_entity: g("cfg-ev_charger_current_entity").value,
+      ev_charger_switch_entity: g("cfg-ev_charger_switch_entity").value,
+      ev_charger_switch_invert: g("cfg-ev_charger_switch_invert").checked,
       max_power_w: Number(g("cfg-max_power_w").value),
       voltage: Number(g("cfg-voltage").value),
       phases: Number(g("cfg-phases").value),
