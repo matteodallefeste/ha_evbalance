@@ -10,6 +10,26 @@ users.
 
 ## [Unreleased]
 
+## [26.7.14] - 2026-07-13
+
+### Added
+- Optional **charging pause/resume switch** for the EV charger (config option
+  `ev_charger_switch_entity`, a `switch` or `input_boolean`). When the available
+  current drops below the configured minimum, charging is now **paused** through
+  this switch instead of writing a below-minimum current to the number entity;
+  it resumes automatically once the available current is back at or above the
+  minimum. An **inverted** flag (`ev_charger_switch_invert`) supports wallboxes
+  whose switch is ON = paused. The option is available both in the initial setup
+  and in the integration options, so existing installations can add it without
+  reconfiguring. When no switch is set, the previous pause-current behavior is
+  kept.
+
+### Fixed
+- The balancer could trip the main meter/breaker: lowering the current below the
+  wallbox minimum (e.g. 6 A) does not actually stop charging, so the charger
+  kept drawing its minimum power on top of the other loads and pushed the total
+  over the contracted limit. Pausing via the new charging switch prevents this.
+
 ## [26.7.13] - 2026-07-10
 
 ### Added
