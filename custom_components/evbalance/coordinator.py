@@ -38,7 +38,10 @@ from .const import (
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
     CONF_EV_CHARGER_POWER,
+    CONF_EV_CHARGER_SWITCH,
+    CONF_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_CURRENT_STEPS,
+    DEFAULT_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_HOLD_SECONDS,
     DEFAULT_MAX_CURRENT,
     DEFAULT_MIN_CURRENT,
@@ -165,13 +168,34 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         inp = BalancerInputs(sources_w=sources_w, ev_charger_w=ev_charger_w)
         target = next_current(cfg, inp, self.state, now_mono)
 
-        # Attuazione: scrivi sulla EV Charger solo se abilitato e se il valore cambia.
+        # Attuazione (solo se il bilanciamento è abilitato dallo switch).
         wb_number = self._opt(CONF_EV_CHARGER_CURRENT)
-        if self.balancing_enabled and wb_number:
-            current_set = self.hass.states.get(wb_number)
-            current_val = _to_float(current_set.state) if current_set else None
-            if current_val is None or int(current_val) != target:
-                await self._write_current(wb_number, target)
+        wb_switch = self._opt(CONF_EV_CHARGER_SWITCH)
+        switch_invert = bool(
+            self._opt(CONF_EV_CHARGER_SWITCH_INVERT, DEFAULT_EV_CHARGER_SWITCH_INVERT)
+        )
+        paused = self.state.charging_blocked
+
+        if self.balancing_enabled:
+            if wb_switch:
+                # Con lo switch di pausa fermiamo davvero la ricarica quando la
+                # corrente scende sotto il minimo: scrivere un valore < minimo sul
+                # number non spegne la wallbox, che continuerebbe a erogare al
+                # minimo facendo scattare il contatore.
+                if paused:
+                    # Metti in pausa. Non tocchiamo la corrente: resta l'ultimo
+                    # valore valido, pronto per la ripresa.
+                    await self._set_charging(wb_switch, False, switch_invert)
+                else:
+                    # Prima assicura una corrente valida, poi (ri)attiva la ricarica,
+                    # così alla ripresa non si parte mai sopra il budget.
+                    if wb_number:
+                        await self._sync_current(wb_number, target)
+                    await self._set_charging(wb_switch, True, switch_invert)
+            elif wb_number:
+                # Comportamento legacy senza switch: scrivi il valore calcolato
+                # (target oppure la corrente di pausa).
+                await self._sync_current(wb_number, target)
 
         now_local = dt_util.now()
         scheme = self.tariff_scheme
@@ -193,6 +217,42 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             "balancing_enabled": self.balancing_enabled,
             "max_power_w": cfg.max_power_w,
         }
+
+    async def _sync_current(self, number_entity: str, amps: int) -> None:
+        """Scrive la corrente sul number solo se il valore attuale è diverso."""
+        current_set = self.hass.states.get(number_entity)
+        current_val = _to_float(current_set.state) if current_set else None
+        if current_val is None or int(current_val) != amps:
+            await self._write_current(number_entity, amps)
+
+    async def _set_charging(self, entity_id: str, charging: bool, invert: bool) -> None:
+        """Attiva o mette in pausa la ricarica tramite lo switch della wallbox.
+
+        `charging=True` -> ricarica attiva. Con `invert` lo stato ON dello switch
+        rappresenta la pausa, quindi il significato di on/off viene ribaltato.
+        Chiamiamo il servizio solo se lo stato attuale è diverso da quello voluto,
+        per non inondare la wallbox di comandi a ogni ciclo.
+        """
+        want_on = charging != invert  # XOR: invert ribalta il significato di ON
+        desired = "on" if want_on else "off"
+        st = self.hass.states.get(entity_id)
+        if st is not None and st.state == desired:
+            return
+        service = "turn_on" if want_on else "turn_off"
+        try:
+            await self.hass.services.async_call(
+                "homeassistant",
+                service,
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+            _LOGGER.debug(
+                "EV Charger switch %s -> %s (ricarica=%s)", entity_id, desired, charging
+            )
+        except Exception as err:  # noqa: BLE001 - non deve mai far cadere il ciclo
+            _LOGGER.warning(
+                "Impossibile impostare lo switch %s a %s: %s", entity_id, desired, err
+            )
 
     async def _write_current(self, number_entity: str, amps: int) -> None:
         try:

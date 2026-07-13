@@ -8,6 +8,7 @@
           "name": "Nome",
           "ev_charger_power_entity": "Sensore potenza EV Charger (W)",
           "ev_charger_current_entity": "Sensore corrente EV Charger (A)",
+          "ev_charger_switch_entity": "Switch pausa/ripresa ricarica (opzionale)",
           "sources": "Sorgenti di consumo",
           "sources_include_ev_charger": "La sorgente include già la EV Charger (es. contatore/prelievo rete)",
           "max_power_w": "Limite massimo contatore (W)",
@@ -30,6 +31,8 @@
           "sources": "Sorgenti di consumo",
           "sources_include_ev_charger": "La sorgente include già la EV Charger (es. contatore/prelievo rete)",
           "safety_margin_w": "Margine di sicurezza (W)",
+          "ev_charger_switch_entity": "Switch pausa/ripresa ricarica (opzionale)",
+          "ev_charger_switch_invert": "Switch invertito (ON = in pausa)",
           "pause_current": "Corrente di pausa (A)",
           "current_steps": "Passi di corrente ammessi (A) Es. 6, 8, 10, 13, 16",
           "hold_seconds": "Attesa prima di rialzare da corrente (s)",
@@ -38,6 +41,7 @@
           "show_panel": "Mostra il pannello nella barra laterale"
         },
         "data_description": {
+          "ev_charger_switch_entity": "Switch che avvia/mette in pausa la ricarica della wallbox. Quando la corrente disponibile scende sotto il minimo, la ricarica viene messa in pausa invece di scendere sotto il minimo (che farebbe erogare comunque al minimo e scattare il contatore); riprende quando la corrente torna sopra il minimo. Lascia vuoto se la wallbox si ferma già scrivendo la corrente di pausa.",
           "current_steps": "Valori di Ampere separati da virgola (es. 6, 8, 10, 13, 16). La corrente viene arrotondata per difetto al passo ammesso. Lascia vuoto per usare ogni intero da minimo a massimo."
         }
       }

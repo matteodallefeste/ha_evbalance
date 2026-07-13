@@ -17,6 +17,8 @@ CONF_VOLTAGE = "voltage"                  # tensione di linea (230 monofase, 400
 CONF_PHASES = "phases"                    # 1 o 3
 CONF_EV_CHARGER_POWER = "ev_charger_power_entity"    # sensore potenza istantanea EV Charger (W)
 CONF_EV_CHARGER_CURRENT = "ev_charger_current_entity"  # number su cui scrivo gli Ampere
+CONF_EV_CHARGER_SWITCH = "ev_charger_switch_entity"  # switch/input_boolean pausa-ripresa ricarica
+CONF_EV_CHARGER_SWITCH_INVERT = "ev_charger_switch_invert"  # True = lo stato ON significa "in pausa"
 
 # --- Options (modificabili a caldo) ---
 CONF_SOURCES = "sources"                  # lista di entity_id sensori potenza
@@ -48,6 +50,7 @@ DEFAULT_TARIFF_PRESET = "default"   # tariffa usata finché non se ne seleziona 
 DEFAULT_CURRENCY = "€"
 DEFAULT_SHOW_PANEL = True
 DEFAULT_SOURCES_INCLUDE_EV_CHARGER = False
+DEFAULT_EV_CHARGER_SWITCH_INVERT = False
 
 MIN_UPDATE_INTERVAL = timedelta(seconds=3)
 

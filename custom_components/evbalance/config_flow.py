@@ -35,7 +35,10 @@ from .const import (
     CONF_VOLTAGE,
     CONF_EV_CHARGER_CURRENT,
     CONF_EV_CHARGER_POWER,
+    CONF_EV_CHARGER_SWITCH,
+    CONF_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_CURRENT_STEPS,
+    DEFAULT_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_HOLD_SECONDS,
     DEFAULT_MAX_CURRENT,
     DEFAULT_MIN_CURRENT,
@@ -59,6 +62,9 @@ POWER_SENSORS = selector.EntitySelector(
 )
 NUMBER_ENTITY = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="number")
+)
+CHARGE_SWITCH = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain=["switch", "input_boolean"])
 )
 PHASES_SELECT = selector.SelectSelector(
     selector.SelectSelectorConfig(
@@ -155,6 +161,7 @@ class EVBalanceConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_NAME, default="EV Balance"): str,
                 vol.Required(CONF_EV_CHARGER_POWER): POWER_SENSOR,
                 vol.Required(CONF_EV_CHARGER_CURRENT): NUMBER_ENTITY,
+                vol.Optional(CONF_EV_CHARGER_SWITCH): CHARGE_SWITCH,
                 vol.Optional(CONF_SOURCES, default=[]): POWER_SENSORS,
                 vol.Required(
                     CONF_SOURCES_INCLUDE_EV_CHARGER,
@@ -217,6 +224,18 @@ class EVBalanceOptionsFlow(OptionsFlow):
                     CONF_SAFETY_MARGIN_W,
                     default=self._current(CONF_SAFETY_MARGIN_W, DEFAULT_SAFETY_MARGIN_W),
                 ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_EV_CHARGER_SWITCH,
+                    description={
+                        "suggested_value": self._current(CONF_EV_CHARGER_SWITCH, None)
+                    },
+                ): CHARGE_SWITCH,
+                vol.Required(
+                    CONF_EV_CHARGER_SWITCH_INVERT,
+                    default=self._current(
+                        CONF_EV_CHARGER_SWITCH_INVERT, DEFAULT_EV_CHARGER_SWITCH_INVERT
+                    ),
+                ): bool,
                 vol.Required(
                     CONF_PAUSE_CURRENT,
                     default=self._current(CONF_PAUSE_CURRENT, DEFAULT_PAUSE_CURRENT),
