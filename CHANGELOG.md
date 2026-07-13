@@ -10,6 +10,17 @@ users.
 
 ## [Unreleased]
 
+## [26.7.15] - 2026-07-13
+
+### Added
+- The **charging pause/resume switch** and its **inverted** flag can now be set
+  directly from the panel's **Settings** tab, next to the EV charger entities —
+  previously they were only available in the integration options dialog.
+
+### Changed
+- Clearer label for the EV charger current field: it is now "EV Charger charging
+  current" (was "EV Charger current number") in the panel and its translations.
+
 ## [26.7.14] - 2026-07-13
 
 ### Added
