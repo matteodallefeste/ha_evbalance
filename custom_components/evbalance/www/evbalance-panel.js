@@ -14,6 +14,9 @@
  * websocket `evbalance/panel`, così il frontend non deve indovinare gli id.
  */
 
+// Nome del custom element, uguale a WEBCOMPONENT_NAME lato Python.
+const WEBCOMPONENT_NAME = "evbalance-panel";
+
 // Le stringhe di traduzione vivono in un modulo separato, caricato in modo
 // asincrono all'avvio del pannello (vedi evbalance-translations.js).
 const TRANSLATIONS_MODULE = "./evbalance-translations.js";
@@ -224,9 +227,19 @@ class EVBalancePanel extends HTMLElement {
     const blocked = blockedSt && blockedSt.state === "on";
     const badge = root.getElementById("v-charge");
     if (badge) {
+      // Dal motivo più specifico al più generico: fermata a mano, fuori dalle
+      // fasce scelte, in pausa dal bilanciatore, in carica, ferma.
+      const allowSt = this._stateOf("charging_allowed");
+      const bandAllowed = bandSt ? bandSt.attributes.allowed !== false : true;
       let label = this._t.idle;
       let cls = "badge idle";
-      if (blocked) {
+      if (allowSt && allowSt.state === "off") {
+        label = this._t.ocppStopped;
+        cls = "badge paused";
+      } else if (!bandAllowed) {
+        label = this._t.outOfBand;
+        cls = "badge paused";
+      } else if (blocked) {
         label = this._t.paused;
         cls = "badge paused";
       } else if (wb != null && wb > CHARGING_THRESHOLD_W) {
@@ -254,6 +267,156 @@ class EVBalancePanel extends HTMLElement {
     if (balCtl && balOn != null && document.activeElement !== balCtl) {
       balCtl.checked = balOn;
     }
+
+    this._updateOcpp(root, set);
+  }
+
+  // --- Wallbox OCPP -----------------------------------------------------
+
+  // La modalità di controllo arriva dai metadati (tab Live) o dalla config
+  // (tab Impostazioni): il pannello si carica prima l'una e poi l'altra.
+  get _isOcpp() {
+    if (this._config && this._config.control_mode) {
+      return this._config.control_mode === "ocpp";
+    }
+    return !!this._meta && this._meta.control_mode === "ocpp";
+  }
+
+  // Indirizzo da configurare nella wallbox. L'host è quello con cui stiamo
+  // guardando Home Assistant, quindi è già quello giusto da digitare.
+  // Host da proporre alla wallbox: l'IP LAN di Home Assistant, non quello con
+  // cui stiamo navigando noi. Guardando il pannello da fuori casa (o via nome
+  // pubblico) `location.hostname` è un indirizzo che la wallbox, attaccata alla
+  // rete di casa, non riesce a raggiungere. Resta come ripiego.
+  get _ocppHost() {
+    return (this._meta && this._meta.local_ip) || location.hostname;
+  }
+
+  _ocppUrl(pending = {}) {
+    const c = { ...(this._config || {}), ...pending };
+    const id = (c.ocpp_cp_id || "").trim() || "EVBALANCE";
+    if (c.ocpp_use_ha_port) {
+      return `ws://${this._ocppHost}:${location.port || 8123}/api/evbalance/ocpp/${id}`;
+    }
+    return `ws://${this._ocppHost}:${c.ocpp_port || 9000}/${id}`;
+  }
+
+  _ocppCard() {
+    if (!this._isOcpp) return "";
+    const t = this._t;
+    return `
+      <section class="card" id="ocpp-card">
+        <div class="chart-head">
+          <h2>${t.ocppTitle}</h2>
+          <span class="badge idle" id="v-ocpp-link">—</span>
+          <button id="ocpp-charge-btn" class="charge-btn" hidden></button>
+        </div>
+        <div class="tiles">
+          <div class="tile">
+            <span class="k">${t.ocppConnStatus}</span>
+            <span class="badge idle" id="v-ocpp-status">—</span>
+          </div>
+          <div class="tile"><span class="k">${t.ocppRequested}</span>
+            <span class="val" id="v-ocpp-req">—</span></div>
+          <div class="tile"><span class="k">${t.ocppOffered}</span>
+            <span class="val" id="v-ocpp-off">—</span></div>
+          <div class="tile"><span class="k">${t.ocppSession}</span>
+            <span class="val" id="v-ocpp-session">—</span></div>
+          <div class="tile"><span class="k">${t.ocppSoc}</span>
+            <span class="val" id="v-ocpp-soc">—</span></div>
+          <div class="tile"><span class="k">${t.ocppPhases}</span>
+            <span class="val phases" id="v-ocpp-phases">—</span></div>
+        </div>
+        <div class="hint" id="v-ocpp-device"></div>
+        <div class="ocpp-warn" id="v-ocpp-warn" style="display:none"></div>
+      </section>`;
+  }
+
+  _updateOcpp(root, set) {
+    const card = root.getElementById("ocpp-card");
+    if (!card) return;
+    const t = this._t;
+
+    const linkSt = this._stateOf("ocpp_connected");
+    const linked = linkSt ? linkSt.state === "on" : null;
+    const link = root.getElementById("v-ocpp-link");
+    if (link) {
+      link.textContent = linked == null ? "—" : linked ? t.ocppConnected : t.ocppWaiting;
+      link.className = "badge " + (linked ? "charging" : "idle");
+    }
+
+    const allowSt = this._stateOf("charging_allowed");
+    const st = this._stateOf("ocpp_status");
+    const a = (st && st.attributes) || {};
+    const raw = st && st.state !== "unknown" && st.state !== "unavailable" ? st.state : null;
+
+    const status = root.getElementById("v-ocpp-status");
+    if (status) {
+      const states = t.ocppStates || {};
+      const stopped = allowSt && allowSt.state === "off";
+      // Lo stop manuale spiega il perché di uno stato altrimenti ambiguo.
+      status.textContent = stopped
+        ? t.ocppStopped
+        : raw
+          ? states[raw] || raw
+          : "—";
+      let cls = stopped ? "badge paused" : "badge idle";
+      if (stopped) cls = "badge paused";
+      else if (raw === "Charging") cls = "badge charging";
+      else if (raw === "SuspendedEVSE" || raw === "SuspendedEV") cls = "badge paused";
+      else if (raw === "Faulted") cls = "badge err";
+      status.className = cls;
+    }
+
+    const amps = (v) => (v == null ? "—" : `${v} A`);
+    set("v-ocpp-req", amps(a.requested_limit_a));
+    set("v-ocpp-off", amps(a.current_offered_a));
+
+    const session = this._numState("ocpp_session_energy");
+    set("v-ocpp-session", session == null ? "—" : this._fmtEnergy(session));
+    set("v-ocpp-soc", a.soc == null ? "—" : `${a.soc} %`);
+
+    const phases = a.currents_a || {};
+    const names = Object.keys(phases).sort();
+    set(
+      "v-ocpp-phases",
+      names.length ? names.map((n) => `${n} ${phases[n]} A`).join(" · ") : "—"
+    );
+
+    // Riga identificativa: chi è, che firmware ha, con che ID si presenta.
+    const parts = [a.vendor, a.model].filter(Boolean).join(" ");
+    const bits = [];
+    if (parts) bits.push(parts);
+    if (a.firmware) bits.push(`fw ${a.firmware}`);
+    if (a.charge_point_id) bits.push(a.charge_point_id);
+    set("v-ocpp-device", bits.length ? `${t.ocppDevice}: ${bits.join(" · ")}` : "");
+
+    // Bottone di stop/ripresa: rispecchia lo switch "Ricarica consentita".
+    const btn = root.getElementById("ocpp-charge-btn");
+    if (btn) {
+      const allowed = allowSt ? allowSt.state === "on" : null;
+      btn.hidden = allowed == null;
+      if (allowed != null) {
+        btn.textContent = allowed ? t.ocppStop : t.ocppStart;
+        btn.className = "charge-btn" + (allowed ? "" : " resume");
+      }
+    }
+
+    // Un solo avviso per volta, dal più urgente.
+    const warn = root.getElementById("v-ocpp-warn");
+    if (!warn) return;
+    let message = "";
+    if (linked === false) {
+      message = `${t.ocppUrlHint} ${this._ocppUrl()}`;
+    } else if (a.limit_confirmed === false) {
+      message = a.limit_error
+        ? `${t.ocppLimitWarn} — ${a.limit_error}`
+        : t.ocppLimitWarn;
+    } else if (a.supports_smart_charging === false) {
+      message = t.ocppNoSmart;
+    }
+    warn.textContent = message;
+    warn.style.display = message ? "" : "none";
   }
 
   // --- Statistiche energia per fascia ----------------------------------
@@ -832,6 +995,7 @@ class EVBalancePanel extends HTMLElement {
               </div>
             </div>
           </section>
+          ${this._ocppCard()}
         </section>
 
         <section class="tabpanel" data-panel="stats" style="display:none">
@@ -866,6 +1030,11 @@ class EVBalancePanel extends HTMLElement {
           ${this._settingsSection()}
         </section>
       </div>`;
+
+    const chargeBtn = this.shadowRoot.getElementById("ocpp-charge-btn");
+    if (chargeBtn) {
+      chargeBtn.addEventListener("click", () => this._toggleCharging());
+    }
 
     // Handler dei tab.
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
@@ -995,6 +1164,102 @@ class EVBalancePanel extends HTMLElement {
       <select id="cfg-${key}">${empty}${this._optionTags(ids, sel)}</select></label>`;
   }
 
+  // Selettore della modalità di controllo: cambiandolo la sezione sotto viene
+  // ridisegnata, e al salvataggio l'integrazione si ricarica.
+  _modeField(t) {
+    const ocpp = this._isOcpp;
+    return `<label class="field"><span>${t.fControlMode}</span>
+      <select id="cfg-control_mode">
+        <option value="entities" ${ocpp ? "" : "selected"}>${t.mEntities}</option>
+        <option value="ocpp" ${ocpp ? "selected" : ""}>${t.mOcpp}</option>
+      </select>
+      <span class="field-hint">${t.modeHint}</span></label>`;
+  }
+
+  // Passi da eseguire sulla wallbox: sono gli stessi per qualunque colonnina
+  // OCPP 1.6J, e coprono gli inciampi che fanno fallire il collegamento.
+  _ocppGuide(t) {
+    const steps = (t.ocppGuide || [])
+      .map((s) => `<li>${this._esc(s)}</li>`)
+      .join("");
+    return `<details class="ocpp-guide wide">
+      <summary>${t.ocppGuideTitle}</summary>
+      <p>${t.ocppGuideIntro}</p>
+      <ol>${steps}</ol>
+      <p class="note">${t.ocppReachable}</p>
+      <p class="note">${t.ocppGuideNote}</p>
+    </details>`;
+  }
+
+  // Campi della wallbox: dipendono da come la si comanda.
+  _chargerFields(c, t) {
+    if (!this._isOcpp) {
+      return `
+        ${this._fieldEntity("ev_charger_power_entity", t.fEvChargerPower, this._powerSensors())}
+        ${this._fieldEntity("ev_charger_current_entity", t.fEvChargerCurrent, this._numberEntities())}
+        ${this._fieldEntity("ev_charger_switch_entity", t.fEvChargerSwitch, this._switchEntities())}
+        <label class="cb-row single wide">
+          <input type="checkbox" id="cfg-ev_charger_switch_invert" ${
+            c.ev_charger_switch_invert ? "checked" : ""
+          }><span>${t.fEvChargerSwitchInvert}</span></label>
+        ${this._fieldNum("pause_current", t.fPauseCurrent, 1)}`;
+    }
+
+    return `
+      <div class="field wide"><span>${t.ocppUrlHint}</span>
+        <code class="ocpp-url" id="ocpp-url-preview">${this._esc(this._ocppUrl())}</code></div>
+      ${this._ocppGuide(t)}
+      ${this._fieldNum("ocpp_port", t.fOcppPort, 1)}
+      <label class="field"><span>${t.fOcppCpId}</span>
+        <input id="cfg-ocpp_cp_id" type="text" placeholder="${t.fOcppCpIdHint}"
+               value="${this._esc(c.ocpp_cp_id || "")}"></label>
+      <label class="field"><span>${t.fOcppPassword}</span>
+        <input id="cfg-ocpp_password" type="password"
+               value="${this._esc(c.ocpp_password || "")}"></label>
+      ${this._fieldNum("ocpp_connector", t.fOcppConnector, 1)}
+      ${this._fieldNum("ocpp_meter_interval", t.fOcppMeterInterval, 1)}
+      <label class="cb-row single wide">
+        <input type="checkbox" id="cfg-ocpp_use_ha_port" ${
+          c.ocpp_use_ha_port ? "checked" : ""
+        }><span>${t.fOcppUseHaPort}</span></label>
+      ${this._fieldEntity("ev_charger_power_entity", t.fEvChargerPowerOpt, this._powerSensors())}`;
+  }
+
+  // Ridisegna solo il blocco dei campi wallbox quando cambia la modalità.
+  // `display:contents` fa sì che il contenitore non rompa la griglia del form.
+  _renderChargerFields() {
+    const box = this.shadowRoot.getElementById("charger-fields");
+    if (box) box.innerHTML = this._chargerFields(this._config, this._t);
+    this._wireChargerFields();
+  }
+
+  // L'indirizzo mostrato deve essere quello che stai per salvare, non quello di
+  // quando la pagina è stata disegnata: si aggiorna a ogni tasto.
+  _refreshOcppUrl() {
+    const root = this.shadowRoot;
+    const out = root.getElementById("ocpp-url-preview");
+    if (!out) return;
+    const pending = {};
+    const port = root.getElementById("cfg-ocpp_port");
+    const cpId = root.getElementById("cfg-ocpp_cp_id");
+    const haPort = root.getElementById("cfg-ocpp_use_ha_port");
+    if (port && port.value) pending.ocpp_port = Number(port.value);
+    if (cpId) pending.ocpp_cp_id = cpId.value;
+    if (haPort) pending.ocpp_use_ha_port = haPort.checked;
+    out.textContent = this._ocppUrl(pending);
+  }
+
+  _wireChargerFields() {
+    const root = this.shadowRoot;
+    ["cfg-ocpp_port", "cfg-ocpp_cp_id", "cfg-ocpp_use_ha_port"].forEach((id) => {
+      const el = root.getElementById(id);
+      if (el) {
+        el.addEventListener("input", () => this._refreshOcppUrl());
+        el.addEventListener("change", () => this._refreshOcppUrl());
+      }
+    });
+  }
+
   _fieldSources(label) {
     const list = this._powerSensors();
     const selected = this._config.sources || [];
@@ -1014,6 +1279,27 @@ class EVBalancePanel extends HTMLElement {
       .join("");
     return `<div class="field wide"><span>${label}</span>
       <div class="cb-list">${items}</div></div>`;
+  }
+
+  // Fasce in cui si vuole ricaricare. L'elenco viene dallo schema tariffario
+  // attivo, così segue la tariffa scelta invece di essere fisso.
+  _fieldAllowedBands(t) {
+    const bands = (this._meta && this._meta.bands) || [];
+    if (!bands.length) return "";
+    const selected = new Set(this._config.allowed_bands || []);
+    const meta = (this._meta && this._meta.band_meta) || {};
+    const items = bands
+      .map((b) => {
+        const label = (meta[b] && meta[b].label) || b;
+        const testo = label === b ? b : `${b} · ${label}`;
+        return `<label class="cb-row"><input type="checkbox" class="band-cb" value="${this._esc(
+          b
+        )}" ${selected.has(b) ? "checked" : ""}><span>${this._esc(testo)}</span></label>`;
+      })
+      .join("");
+    return `<div class="field wide"><span>${t.fAllowedBands}</span>
+      <div class="cb-list">${items}</div>
+      <span class="field-hint">${t.fAllowedBandsHint}</span></div>`;
   }
 
   _balancingControl() {
@@ -1043,13 +1329,8 @@ class EVBalancePanel extends HTMLElement {
         <label class="field wide"><span>${t.fName}</span>
           <input id="cfg-name" type="text" value="${this._esc(c.name || "")}"></label>
 
-        ${this._fieldEntity("ev_charger_power_entity", t.fEvChargerPower, this._powerSensors())}
-        ${this._fieldEntity("ev_charger_current_entity", t.fEvChargerCurrent, this._numberEntities())}
-        ${this._fieldEntity("ev_charger_switch_entity", t.fEvChargerSwitch, this._switchEntities())}
-        <label class="cb-row single wide">
-          <input type="checkbox" id="cfg-ev_charger_switch_invert" ${
-            c.ev_charger_switch_invert ? "checked" : ""
-          }><span>${t.fEvChargerSwitchInvert}</span></label>
+        ${this._modeField(t)}
+        <div id="charger-fields">${this._chargerFields(c, t)}</div>
 
         ${this._fieldSources(t.fSources)}
         <label class="cb-row single wide">
@@ -1068,11 +1349,12 @@ class EVBalancePanel extends HTMLElement {
         ${this._fieldNum("min_current", t.fMinCurrent, 1)}
         ${this._fieldNum("max_current", t.fMaxCurrent, 1)}
         ${this._fieldNum("safety_margin_w", t.fSafetyMargin, 50)}
-        ${this._fieldNum("pause_current", t.fPauseCurrent, 1)}
         ${this._fieldNum("hold_seconds", t.fHoldSeconds, 5)}
         ${this._fieldNum("update_interval", t.fUpdateInterval, 1)}
 
         ${this._tariffSection(c)}
+
+        ${this._fieldAllowedBands(t)}
 
         ${this._pricesSection(c)}
 
@@ -1159,6 +1441,16 @@ class EVBalancePanel extends HTMLElement {
     if (bal) {
       bal.addEventListener("change", (e) => this._toggleBalancing(e.target.checked));
     }
+    this._wireChargerFields();
+    const mode = this.shadowRoot.getElementById("cfg-control_mode");
+    if (mode) {
+      mode.addEventListener("change", () => {
+        // Il resto del form legge la modalità da `_config`: aggiorniamola
+        // subito, così i campi ridisegnati sono quelli giusti.
+        this._config = { ...this._config, control_mode: mode.value };
+        this._renderChargerFields();
+      });
+    }
     this._wireTariff();
     this._wireCalc();
   }
@@ -1234,6 +1526,24 @@ class EVBalancePanel extends HTMLElement {
     });
   }
 
+  // Ferma o riprende la ricarica agendo sullo switch: il coordinator ne tiene
+  // conto al ciclo successivo, con la wallbox comandata come sempre.
+  async _toggleCharging() {
+    const id = this._meta && this._meta.entities && this._meta.entities.charging_allowed;
+    if (!id) return;
+    const st = this._hass.states[id];
+    const on = st ? st.state === "on" : true;
+    const btn = this.shadowRoot.getElementById("ocpp-charge-btn");
+    if (btn) btn.disabled = true;
+    try {
+      await this._hass.callService("switch", on ? "turn_off" : "turn_on", {
+        entity_id: id,
+      });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async _toggleBalancing(on) {
     const id = this._meta && this._meta.entities && this._meta.entities.balancing;
     if (!id) return;
@@ -1250,30 +1560,60 @@ class EVBalancePanel extends HTMLElement {
   _readForm() {
     const root = this.shadowRoot;
     const g = (id) => root.getElementById(id);
-    const tariffPreset = g("cfg-tariff_preset").value;
-    return {
-      name: g("cfg-name").value.trim(),
-      ev_charger_power_entity: g("cfg-ev_charger_power_entity").value,
-      ev_charger_current_entity: g("cfg-ev_charger_current_entity").value,
-      ev_charger_switch_entity: g("cfg-ev_charger_switch_entity").value,
-      ev_charger_switch_invert: g("cfg-ev_charger_switch_invert").checked,
-      max_power_w: Number(g("cfg-max_power_w").value),
-      voltage: Number(g("cfg-voltage").value),
-      phases: Number(g("cfg-phases").value),
-      min_current: Number(g("cfg-min_current").value),
-      max_current: Number(g("cfg-max_current").value),
+    // I campi della wallbox dipendono dalla modalità: quelli dell'altra
+    // modalità non esistono nel DOM e non vanno letti (né rispediti vuoti).
+    const val = (id, fallback = "") => {
+      const el = g(id);
+      return el ? el.value : fallback;
+    };
+    const checked = (id) => {
+      const el = g(id);
+      return el ? el.checked : false;
+    };
+    const tariffPreset = val("cfg-tariff_preset");
+
+    const cfg = {
+      name: val("cfg-name").trim(),
+      control_mode: val("cfg-control_mode", "entities"),
+      max_power_w: Number(val("cfg-max_power_w")),
+      voltage: Number(val("cfg-voltage")),
+      phases: Number(val("cfg-phases")),
+      min_current: Number(val("cfg-min_current")),
+      max_current: Number(val("cfg-max_current")),
       sources: Array.from(root.querySelectorAll(".src-cb")).filter((cb) => cb.checked).map((cb) => cb.value),
-      sources_include_ev_charger: g("cfg-sources_include_ev_charger").checked,
-      safety_margin_w: Number(g("cfg-safety_margin_w").value),
-      pause_current: Number(g("cfg-pause_current").value),
-      hold_seconds: Number(g("cfg-hold_seconds").value),
-      update_interval: Number(g("cfg-update_interval").value),
+      sources_include_ev_charger: checked("cfg-sources_include_ev_charger"),
+      safety_margin_w: Number(val("cfg-safety_margin_w")),
+      hold_seconds: Number(val("cfg-hold_seconds")),
+      update_interval: Number(val("cfg-update_interval")),
       tariff_preset: tariffPreset,
       tariffs: tariffPreset === "custom" ? this._buildTariffPayload() : null,
       tariff_prices: this._readPrices(),
-      currency: (g("cfg-currency").value || "€").trim() || "€",
-      show_panel: g("cfg-show_panel").checked,
+      allowed_bands: Array.from(root.querySelectorAll(".band-cb"))
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.value),
+      currency: (val("cfg-currency") || "€").trim() || "€",
+      show_panel: checked("cfg-show_panel"),
+      ev_charger_power_entity: val("cfg-ev_charger_power_entity"),
     };
+
+    if (this._isOcpp) {
+      Object.assign(cfg, {
+        ocpp_port: Number(val("cfg-ocpp_port")),
+        ocpp_cp_id: val("cfg-ocpp_cp_id").trim(),
+        ocpp_password: val("cfg-ocpp_password"),
+        ocpp_connector: Number(val("cfg-ocpp_connector")),
+        ocpp_meter_interval: Number(val("cfg-ocpp_meter_interval")),
+        ocpp_use_ha_port: checked("cfg-ocpp_use_ha_port"),
+      });
+    } else {
+      Object.assign(cfg, {
+        ev_charger_current_entity: val("cfg-ev_charger_current_entity"),
+        ev_charger_switch_entity: val("cfg-ev_charger_switch_entity"),
+        ev_charger_switch_invert: checked("cfg-ev_charger_switch_invert"),
+        pause_current: Number(val("cfg-pause_current")),
+      });
+    }
+    return cfg;
   }
 
   _readPrices() {
@@ -1299,13 +1639,23 @@ class EVBalancePanel extends HTMLElement {
       status.className = "save-status err";
       return;
     }
+    if (this._isOcpp && !(cfg.ocpp_port >= 1 && cfg.ocpp_port <= 65535)) {
+      status.textContent = t.invalidPort;
+      status.className = "save-status err";
+      return;
+    }
 
     btn.disabled = true;
     status.textContent = t.saving;
     status.className = "save-status";
     try {
       await this._hass.callWS({ type: "evbalance/config/set", config: cfg });
-      this._config = cfg;
+      // Merge, non sostituzione: il form invia solo i campi della modalità
+      // attiva e non deve far sparire il resto della configurazione.
+      this._config = { ...this._config, ...cfg };
+      // Il backend può normalizzare i valori: ridisegna il blocco wallbox così
+      // l'indirizzo mostrato è quello davvero in vigore.
+      this._renderChargerFields();
       status.textContent = t.saved;
       status.className = "save-status ok";
       // Il reload dell'integrazione può cambiare fasce/limiti: rinfresca i metadati.
@@ -1653,6 +2003,32 @@ class EVBalancePanel extends HTMLElement {
         .badge.charging { background:#22c78b; }
         .badge.paused { background:#f59e0b; }
         .badge.idle { background:#9aa0a6; }
+        .badge.err { background:#ef4444; }
+        .charge-btn { margin-left:auto; padding:6px 14px; border:0; border-radius:999px;
+          font-size:13px; font-weight:600; cursor:pointer; color:#fff;
+          background:#f59e0b; }
+        .charge-btn.resume { background:#22c78b; }
+        .charge-btn:disabled { opacity:.6; cursor:default; }
+
+        /* Card OCPP */
+        .tile .val.phases { font-size:14px; font-weight:500; line-height:1.4; }
+        .ocpp-warn { margin-top:10px; padding:8px 12px; border-radius:8px;
+          font-size:13px; background:rgba(239,68,68,.12); color:#ef4444;
+          border:1px solid rgba(239,68,68,.35); }
+        .ocpp-url { display:block; padding:6px 10px; border-radius:6px;
+          font-size:13px; word-break:break-all; user-select:all;
+          background:rgba(127,127,127,.12); }
+
+        /* Il contenitore non deve rompere la griglia del form. */
+        #charger-fields { display:contents; }
+        .field-hint { font-size:12px; opacity:.6; margin-top:3px; }
+        .ocpp-guide { padding:10px 12px; border-radius:8px; font-size:13px;
+          background:rgba(127,127,127,.08); border:1px solid rgba(127,127,127,.2); }
+        .ocpp-guide summary { cursor:pointer; font-weight:600; }
+        .ocpp-guide p { margin:10px 0 6px; opacity:.85; }
+        .ocpp-guide ol { margin:0; padding-left:20px; }
+        .ocpp-guide li { margin-bottom:7px; line-height:1.45; }
+        .ocpp-guide .note { opacity:.7; margin-bottom:0; }
         .chip { align-self:flex-start; font-size:12px; padding:2px 8px; border-radius:999px;
           background: var(--divider-color, #e0e0e0); }
         .chart-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
@@ -1781,4 +2157,15 @@ class EVBalancePanel extends HTMLElement {
   }
 }
 
-customElements.define("evbalance-panel", EVBalancePanel);
+// Lo stesso modulo può finire caricato due volte nella stessa pagina: l'URL
+// porta un token anti-cache che cambia quando l'integrazione si ricarica, e due
+// URL diversi sono due istanze distinte del modulo per il browser. Senza questa
+// guardia il secondo `define` solleva "the name has already been used with this
+// registry" e il pannello non si apre più finché non si ricarica la pagina.
+if (!customElements.get(WEBCOMPONENT_NAME)) {
+  customElements.define(WEBCOMPONENT_NAME, EVBalancePanel);
+}
+
+// Esportato solo per i controlli automatici (tools/check_panel.mjs):
+// a runtime il pannello si registra da sé come custom element.
+export { EVBalancePanel };

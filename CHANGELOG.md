@@ -10,6 +10,99 @@ users.
 
 ## [Unreleased]
 
+## [26.9.1] - 2026-09-09
+
+### Added
+- **OCPP 1.6J control mode**: EV Balance can now run its own **CSMS** and talk
+  to the charger directly over a websocket, with no vendor integration and no
+  cloud service in between. The mode is chosen when adding the integration
+  (*Directly over OCPP 1.6*) and is served either on a dedicated port (default
+  9000) or on Home Assistant's own port under `/api/evbalance/ocpp/<id>`, which
+  avoids publishing an extra port when HA runs in a container.
+- OCPP telemetry replaces the external power sensor when available: active
+  power, per-phase current and voltage, energy register and state of charge,
+  taken straight from the charger. The power sensor remains as a fallback.
+- New entities in OCPP mode: **Charger status (OCPP)** — the real connector
+  state (`Charging`, `SuspendedEV`, `SuspendedEVSE`, `Faulted`, …) with vendor,
+  model, firmware and the requested/offered current as attributes — **Session
+  energy**, from the charger's own meter registers, and **Charger connected
+  (OCPP)**.
+- **Charger card in the panel's Live tab** (OCPP mode): link state, real
+  connector state, requested versus offered current, session energy, state of
+  charge, current per phase, and the charger's vendor/model/firmware. It warns
+  when the charger is not applying the requested limit and, while no charger is
+  connected, shows the exact websocket address to configure — built from the
+  host the panel is being viewed on. The Settings tab is mode-aware too: it
+  shows the OCPP fields (port, Charge Point ID, password, connector, telemetry
+  interval, Home Assistant port) instead of the charger entities and the pause
+  current.
+- The **control mode is switchable from the panel's Settings tab**: a selector
+  between *Home Assistant entities* and *Direct OCPP 1.6* swaps the charger
+  fields in place and reloads the integration on save, so an existing setup can
+  move to OCPP without being removed and re-added (which would lose its energy
+  history). The mode is validated server-side.
+- A **step-by-step guide** in the OCPP settings covering what to enter on any
+  OCPP 1.6J charger: protocol version, CSMS URL (including the `ws://` prefix
+  ambiguity between firmwares), Charge Point ID matching, password, and the
+  single-backend caveat.
+- **Manual charging stop**: a new *Charging allowed* switch pauses the charger
+  regardless of the available budget, with a button in the panel's charger card
+  to stop and resume. In OCPP mode it is the usual 0 A profile, so the session
+  stays open and there is no need to unplug. The choice survives a restart, and
+  the state badge says *Stopped manually* rather than a generic "paused".
+- **Charge only in chosen tariff bands**: pick the bands charging is allowed in
+  (e.g. F1 and F3) from the panel's Settings or the integration options; outside
+  them the charger is paused. Selecting none keeps the previous behaviour of
+  charging in every band. The band list follows the active tariff scheme, and
+  the state badge shows *Out of band* so the reason for a pause is never
+  ambiguous.
+- The websocket address shown to configure the charger is now built from **Home
+  Assistant's own LAN address**, supplied by the backend, instead of the host
+  the panel happens to be opened with. Viewing the panel from outside the home
+  used to suggest a public hostname the charger cannot reach. The address also
+  updates live as the port, Charge Point ID or Home Assistant-port flag are
+  edited, so it always matches what is about to be saved.
+- `tools/check_panel.mjs`: browser-free checks for the panel — the OCPP card,
+  the per-mode settings fields, the form reader and translation-key parity
+  across all five languages. Run with `node tools/check_panel.mjs`.
+- `tools/ocpp_probe.py`: a standalone, dependency-free OCPP probe to work out
+  why a charger does not connect. `sniff` prints the raw HTTP upgrade request
+  (path, offered subprotocols, basic auth); `serve` runs a full OCPP dialogue
+  with an interactive console for `SetChargingProfile`, `TriggerMessage` and
+  the rest.
+
+### Fixed
+- The panel's cache-busting token is now derived from the **contents** of the
+  panel's JS modules instead of a hand-maintained version number, so a browser
+  can no longer keep serving a stale panel after an update.
+- The panel no longer crashes with *"the name evbalance-panel has already been
+  used with this registry"* when the module is loaded twice in the same page —
+  which the content-based token made possible, since a reload changes the module
+  URL. The custom element is now only defined if it is not registered already.
+- **The charger could keep drawing its minimum when asked to pause.** In OCPP
+  mode this is fixed at the root: any target below the configured minimum is
+  sent as a **0 A charging profile**, which suspends delivery (`SuspendedEVSE`)
+  while keeping the session open — no pause switch is needed, and a below-minimum
+  current is never requested. The applied limit is then verified against what
+  the charger reports offering, and the profile is re-sent when the two
+  disagree; the profile is also re-applied when a transaction starts and after a
+  reconnection, since some chargers drop their limits in both cases.
+- With entity control, a current the charger refuses to accept (typically a
+  value below its 6 A minimum) is now **detected and logged** instead of being
+  silently reported as applied: the balancer no longer claims to be paused while
+  the charger keeps charging.
+
+### Changed
+- Actuation moved out of the coordinator into a dedicated `actuator` layer, so
+  the balancing logic no longer knows how the charger is driven. Behaviour of
+  the existing entity-based mode is unchanged.
+- OCPP settings now live only in the config entry **options**, the single place
+  the options flow and the panel already edited. They used to be written to the
+  entry data as well, leaving two copies of the same value that could drift
+  apart. Existing entries are normalised on startup, keeping the options value.
+- CI gained a `pyflakes` job that fails on undefined or unused names — the check
+  that would have caught the missing imports above.
+
 ## [26.7.15] - 2026-07-13
 
 ### Added

@@ -196,3 +196,30 @@ def test_arera_regression():
     assert energy.active_band(s, datetime(2026, 7, 8, 7, 30)) == "F2"   # mer 07:30
     assert energy.active_band(s, datetime(2026, 7, 11, 12, 0)) == "F2"  # sab 12:00
     assert energy.active_band(s, datetime(2026, 7, 12, 12, 0)) == "F3"  # dom 12:00
+
+
+# --- fasce ammesse alla ricarica ---------------------------------------
+
+def test_nessun_vincolo_ammette_tutto():
+    """Elenco vuoto = comportamento storico: si ricarica sempre."""
+    assert energy.band_allowed("F1", [])
+    assert energy.band_allowed("F3", None)
+    assert energy.band_allowed(None, [])
+
+
+def test_solo_le_fasce_scelte():
+    assert energy.band_allowed("F1", ["F1", "F3"])
+    assert energy.band_allowed("F3", ["F1", "F3"])
+    assert not energy.band_allowed("F2", ["F1", "F3"])
+
+
+def test_fascia_ignota_non_passa_se_c_e_un_vincolo():
+    """Meglio non caricare che caricare nell'ora sbagliata."""
+    assert not energy.band_allowed(None, ["F1"])
+    assert not energy.band_allowed("F9", ["F1"])
+
+
+def test_le_fasce_ammesse_valgono_per_qualsiasi_schema():
+    """Il vincolo lavora sugli id dello schema attivo, non su F1/F2/F3 fissi."""
+    assert energy.band_allowed("notte", ["notte"])
+    assert not energy.band_allowed("giorno", ["notte"])

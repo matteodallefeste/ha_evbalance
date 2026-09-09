@@ -4,8 +4,6 @@ Coprono conversione W/A, quantizzazione ai passi ammessi (`current_steps`),
 il calcolo della corrente desiderata e l'isteresi salita/discesa.
 """
 
-import math
-
 import pytest
 
 from balancer import (

@@ -18,7 +18,9 @@ indefinito). Il frontend le interroga con il comando core
 
 from __future__ import annotations
 
+import hashlib
 import os
+import socket
 from typing import Any
 
 import voluptuous as vol
@@ -30,11 +32,19 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from .const import (
+    CONF_ALLOWED_BANDS,
+    CONF_CONTROL_MODE,
     CONF_HOLD_SECONDS,
     CONF_MAX_CURRENT,
     CONF_MAX_POWER_W,
     CONF_MIN_CURRENT,
     CONF_NAME,
+    CONF_OCPP_CONNECTOR,
+    CONF_OCPP_CP_ID,
+    CONF_OCPP_METER_INTERVAL,
+    CONF_OCPP_PASSWORD,
+    CONF_OCPP_PORT,
+    CONF_OCPP_USE_HA_PORT,
     CONF_PAUSE_CURRENT,
     CONF_PHASES,
     CONF_SAFETY_MARGIN_W,
@@ -51,9 +61,17 @@ from .const import (
     CONF_EV_CHARGER_POWER,
     CONF_EV_CHARGER_SWITCH,
     CONF_EV_CHARGER_SWITCH_INVERT,
+    DEFAULT_ALLOWED_BANDS,
+    DEFAULT_CONTROL_MODE,
     DEFAULT_CURRENCY,
     DEFAULT_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_HOLD_SECONDS,
+    DEFAULT_OCPP_CONNECTOR,
+    DEFAULT_OCPP_CP_ID,
+    DEFAULT_OCPP_METER_INTERVAL,
+    DEFAULT_OCPP_PASSWORD,
+    DEFAULT_OCPP_PORT,
+    DEFAULT_OCPP_USE_HA_PORT,
     DEFAULT_MAX_CURRENT,
     DEFAULT_MIN_CURRENT,
     DEFAULT_PAUSE_CURRENT,
@@ -65,9 +83,12 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VOLTAGE,
     DOMAIN,
+    MODE_ENTITIES,
+    MODE_OCPP,
     PANEL_ICON,
     PANEL_JS_FILENAME,
     PANEL_JS_VERSION,
+    PANEL_TRANSLATIONS_FILENAME,
     PANEL_STATIC_URL,
     PANEL_TITLE,
     PANEL_URL_PATH,
@@ -79,6 +100,7 @@ from .tariff_loader import get_presets
 WEBCOMPONENT_NAME = "evbalance-panel"
 _STATIC_FLAG = "static_registered"
 _WS_FLAG = "ws_registered"
+_LOCAL_IP_KEY = "local_ip"
 
 WS_TYPE_CONFIG_GET = "evbalance/config/get"
 WS_TYPE_CONFIG_SET = "evbalance/config/set"
@@ -86,6 +108,7 @@ WS_TYPE_CONFIG_SET = "evbalance/config/set"
 # Chiavi che vivono nell'entry.data (struttura) vs entry.options (a caldo).
 _DATA_KEYS = (
     CONF_NAME,
+    CONF_CONTROL_MODE,
     CONF_EV_CHARGER_POWER,
     CONF_EV_CHARGER_CURRENT,
     CONF_MAX_POWER_W,
@@ -108,6 +131,13 @@ _OPTION_KEYS = (
     CONF_TARIFF_PRICES,
     CONF_CURRENCY,
     CONF_SHOW_PANEL,
+    CONF_ALLOWED_BANDS,
+    CONF_OCPP_PORT,
+    CONF_OCPP_CP_ID,
+    CONF_OCPP_PASSWORD,
+    CONF_OCPP_CONNECTOR,
+    CONF_OCPP_METER_INTERVAL,
+    CONF_OCPP_USE_HA_PORT,
 )
 
 # Coercizione per chiave (i valori arrivano da JSON: numeri, bool, liste, stringhe).
@@ -118,12 +148,16 @@ _INT_KEYS = (
     CONF_PAUSE_CURRENT,
     CONF_HOLD_SECONDS,
     CONF_UPDATE_INTERVAL,
+    CONF_OCPP_PORT,
+    CONF_OCPP_CONNECTOR,
+    CONF_OCPP_METER_INTERVAL,
 )
 _FLOAT_KEYS = (CONF_MAX_POWER_W, CONF_VOLTAGE, CONF_SAFETY_MARGIN_W)
 _BOOL_KEYS = (
     CONF_SOURCES_INCLUDE_EV_CHARGER,
     CONF_EV_CHARGER_SWITCH_INVERT,
     CONF_SHOW_PANEL,
+    CONF_OCPP_USE_HA_PORT,
 )
 
 # unique_id (senza prefisso entry_id) -> dominio piattaforma, per le entità live.
@@ -135,6 +169,10 @@ _LIVE_ENTITIES: dict[str, str] = {
     "active_band": "sensor",
     "charging_blocked": "binary_sensor",
     "balancing": "switch",
+    "charging_allowed": "switch",
+    "ocpp_status": "sensor",
+    "ocpp_session_energy": "sensor",
+    "ocpp_connected": "binary_sensor",
 }
 
 
@@ -216,6 +254,10 @@ def _ws_panel(
         msg["id"],
         {
             "title": entry.title,
+            # La modalità di controllo decide cosa mostrare nel tab Live.
+            "control_mode": _entry_value(entry, CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE),
+            # Indirizzo LAN da proporre alla wallbox (vedi _local_ip).
+            "local_ip": hass.data.get(DOMAIN, {}).get(_LOCAL_IP_KEY),
             "preset": preset,
             "bands": bands,
             "band_meta": band_meta,
@@ -277,6 +319,24 @@ def _current_config(entry) -> dict[str, Any]:
         CONF_TARIFF_PRICES: dict(_entry_value(entry, CONF_TARIFF_PRICES, {}) or {}),
         CONF_CURRENCY: _entry_value(entry, CONF_CURRENCY, DEFAULT_CURRENCY),
         CONF_SHOW_PANEL: bool(_entry_value(entry, CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)),
+        CONF_ALLOWED_BANDS: list(
+            _entry_value(entry, CONF_ALLOWED_BANDS, DEFAULT_ALLOWED_BANDS) or []
+        ),
+        # La modalità di controllo si sceglie quando si aggiunge
+        # l'integrazione: il pannello la mostra ma non la cambia.
+        CONF_CONTROL_MODE: _entry_value(entry, CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE),
+        CONF_OCPP_PORT: int(_entry_value(entry, CONF_OCPP_PORT, DEFAULT_OCPP_PORT)),
+        CONF_OCPP_CP_ID: _entry_value(entry, CONF_OCPP_CP_ID, DEFAULT_OCPP_CP_ID),
+        CONF_OCPP_PASSWORD: _entry_value(entry, CONF_OCPP_PASSWORD, DEFAULT_OCPP_PASSWORD),
+        CONF_OCPP_CONNECTOR: int(
+            _entry_value(entry, CONF_OCPP_CONNECTOR, DEFAULT_OCPP_CONNECTOR)
+        ),
+        CONF_OCPP_METER_INTERVAL: int(
+            _entry_value(entry, CONF_OCPP_METER_INTERVAL, DEFAULT_OCPP_METER_INTERVAL)
+        ),
+        CONF_OCPP_USE_HA_PORT: bool(
+            _entry_value(entry, CONF_OCPP_USE_HA_PORT, DEFAULT_OCPP_USE_HA_PORT)
+        ),
     }
 
 
@@ -305,13 +365,17 @@ def _ws_config_get(
 
 def _coerce(key: str, value: Any) -> Any:
     """Converte un valore del form nel tipo atteso dalla config entry."""
+    if key == CONF_CONTROL_MODE:
+        if value not in (MODE_ENTITIES, MODE_OCPP):
+            raise ValueError(f"modalità di controllo sconosciuta: {value!r}")
+        return value
     if key in _BOOL_KEYS:
         return bool(value)
     if key in _INT_KEYS:
         return int(value)
     if key in _FLOAT_KEYS:
         return float(value)
-    if key == CONF_SOURCES:
+    if key in (CONF_SOURCES, CONF_ALLOWED_BANDS):
         return [str(v) for v in (value or [])]
     if key == CONF_TARIFFS:
         if not value:
@@ -415,15 +479,57 @@ async def _async_register_static(hass: HomeAssistant) -> None:
     data[_STATIC_FLAG] = True
 
 
+def _local_ip() -> str | None:
+    """IP con cui Home Assistant è raggiungibile sulla propria LAN.
+
+    Serve al pannello per suggerire alla wallbox un indirizzo che esista
+    davvero: `location.hostname` del browser è l'indirizzo con cui sta
+    navigando *l'utente*, che da fuori casa è quello pubblico — e la wallbox,
+    attaccata alla rete di casa, lì non trova nessuno.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            # Non invia nulla: serve solo a far scegliere la rotta al sistema.
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
+
+def _panel_fingerprint() -> str:
+    """Impronta dei sorgenti JS del pannello, usata come token anti-cache.
+
+    La cartella www/ è servita con header di cache lunghi: se l'URL del modulo
+    non cambia, il browser continua a mostrare il pannello vecchio anche dopo
+    un aggiornamento. Legandolo al contenuto dei file il token si aggiorna da
+    solo, senza dipendere da un numero di versione da ricordare. Il pannello
+    propaga lo stesso token all'import del modulo di traduzioni, così i due
+    restano sempre allineati.
+    """
+    folder = os.path.join(os.path.dirname(__file__), "www")
+    digest = hashlib.sha256()
+    for name in (PANEL_JS_FILENAME, PANEL_TRANSLATIONS_FILENAME):
+        try:
+            with open(os.path.join(folder, name), "rb") as handle:
+                digest.update(handle.read())
+        except OSError:
+            return PANEL_JS_VERSION
+    return digest.hexdigest()[:10]
+
+
 async def async_register_panel(hass: HomeAssistant) -> None:
     """Registra (o ri-registra) il pannello nella sidebar."""
     await _async_register_static(hass)
     async_remove_panel_if_present(hass)
+    version = await hass.async_add_executor_job(_panel_fingerprint)
+    data = hass.data.setdefault(DOMAIN, {})
+    if _LOCAL_IP_KEY not in data:
+        data[_LOCAL_IP_KEY] = await hass.async_add_executor_job(_local_ip)
     await panel_custom.async_register_panel(
         hass,
         webcomponent_name=WEBCOMPONENT_NAME,
         frontend_url_path=PANEL_URL_PATH,
-        module_url=f"{PANEL_STATIC_URL}/{PANEL_JS_FILENAME}?v={PANEL_JS_VERSION}",
+        module_url=f"{PANEL_STATIC_URL}/{PANEL_JS_FILENAME}?v={version}",
         sidebar_title=PANEL_TITLE,
         sidebar_icon=PANEL_ICON,
         require_admin=False,

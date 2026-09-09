@@ -78,15 +78,75 @@ italien F1/F2/F3) avec réinitialisation quotidienne et mensuelle.
 | La source inclut la borne | désactivé | Comme ci-dessus, modifiable ensuite |
 | Marge de sécurité | 200 W | Réserve laissée libre sous la limite compteur, absorbe les pics |
 | Courant de pause | 0 A | Valeur écrite pour « arrêter » la charge en pause (certaines bornes exigent une valeur > 0) |
+| Charger uniquement dans ces plages | (toutes) | Plages tarifaires où la charge est autorisée ; aucune sélectionnée = toutes |
 | Paliers de courant autorisés | (vide) | Liste d'ampères autorisés séparés par des virgules (ex. `6, 8, 10, 16`) ; vide = chaque entier de min à max |
 | Hold seconds | 300 s | Attente minimale avant de pouvoir réaugmenter le courant (anti-oscillation) |
 | Intervalle de mise à jour | 3 s | Fréquence de lecture et d'application du courant (minimum 3 s) |
 | Preset tarifaire | ARERA F1/F2/F3 | Jeu de plages horaires pour le suivi d'énergie (ARERA ou plage unique) |
 | Afficher le panneau | activé | Affiche/masque le panneau EV Balance dans la barre latérale |
 
+## Pilotage OCPP (connexion directe à la borne)
+
+Au lieu de piloter la borne via des entités Home Assistant, EV Balance peut lui
+**parler directement en OCPP 1.6J**. Le mode se choisit à l'ajout de
+l'intégration : *Directement en OCPP 1.6*.
+
+EV Balance ouvre un petit **CSMS** (le système central OCPP) : la borne s'y
+connecte en websocket, sans intégration du fabricant ni service cloud.
+
+**Pourquoi c'est important.** Avec le pilotage par entités, mettre en pause sous
+le minimum de la borne pose problème : écrire 0 A dans un `number` dont le
+minimum est 6 A n'arrête pas la charge, la borne continue à délivrer son minimum
+en plus du reste de la maison et le compteur disjoncte. En OCPP, la pause est
+simplement un **profil de charge à 0 A** : la borne suspend la délivrance
+(`SuspendedEVSE`) en gardant la session ouverte, et la charge reprend en
+remontant la limite — sans interrupteur, sans réautorisation, sans débrancher.
+
+**Configuration**
+
+1. Ajoutez l'intégration et choisissez *Directement en OCPP 1.6*.
+2. Pointez la borne sur `ws://<adresse-home-assistant>:<port>/<Charge Point ID>`
+   (port 9000 par défaut). Sur les bornes Wallbox, cela se règle dans
+   l'application, dans *Réglages → Gestion externe → OCPP*.
+3. Le Charge Point ID doit correspondre exactement à celui configuré ici,
+   **casse comprise**. Laissez le champ vide pour accepter la première borne qui
+   se connecte : c'est le plus rapide pour découvrir l'ID réellement envoyé.
+
+| Paramètre | Défaut | À quoi ça sert |
+|---|---|---|
+| Port du serveur OCPP | 9000 | Port auquel la borne se connecte |
+| Charge Point ID | (vide) | Identifiant attendu ; vide accepte n'importe quelle borne |
+| Mot de passe OCPP | (vide) | Basic auth, si configuré sur la borne |
+| Utiliser le port de Home Assistant | off | Expose l'OCPP sur le port 8123 sous `/api/evbalance/ocpp/<id>` au lieu d'un port dédié — pratique en conteneur |
+| Connecteur | 1 | Connecteur à piloter |
+| Intervalle de télémétrie | 10 s | Fréquence d'envoi des MeterValues par la borne |
+
+**Ce que ça apporte au-delà de la pause**
+
+- **Télémétrie issue de la borne elle-même** : puissance active, courant et
+  tension par phase, index d'énergie, et état de charge quand la borne le
+  remonte. Le capteur de puissance externe devient optionnel (il reste en
+  secours).
+- **État réel du connecteur** — `Charging`, `SuspendedEV` (la voiture s'arrête),
+  `SuspendedEVSE` (c'est nous qui avons mis en pause), `Faulted`.
+- **Énergie de session** prise sur les index de la borne.
+- **Vérification de la limite appliquée** : la limite demandée est comparée à ce
+  que la borne déclare offrir ; en cas d'écart, le profil est renvoyé.
+- **Indépendance du modèle** : le même code vaut pour toute borne OCPP 1.6J.
+
+> Une borne ne dialogue en général qu'avec un seul backend : la pointer vers
+> Home Assistant retire la gestion de la charge au cloud du fabricant. Ne faites
+> pas tourner une autre intégration OCPP sur la même borne.
+
+Pour comprendre pourquoi une borne ne se connecte pas, la sonde autonome
+[`tools/ocpp_probe.py`](tools/ocpp_probe.py) ne demande que Python et affiche la
+poignée de main et tous les messages OCPP.
+
 ## Entités créées
 
 - **Switch** *Équilibrage actif* — sur OFF, il lit mais ne touche pas à la borne.
+- **Switch** *Charge autorisée* — sur OFF, la borne reste à l'arrêt même s'il y
+  a du budget ; le choix survit à un redémarrage.
 - **Binary sensor** *Charge en pause* — avec l'attribut `reasons` (explique la décision).
 - **Number** *Limite maximale du compteur*, *Marge de sécurité* — réglage en direct.
 - **Sensor** puissance totale/sources/borne, *Courant autorisé*, *Plage active*.
@@ -100,6 +160,16 @@ L'intégration enregistre un **panneau latéral optionnel** (custom element, san
 du compteur et l'énergie par plage des derniers mois. Il lit tout depuis les
 entités existantes et les statistiques long terme du Recorder — aucun stockage
 supplémentaire. Activable depuis les options (*Afficher le panneau*).
+
+En **mode OCPP**, l'onglet Live gagne une carte de la borne : état de la
+liaison, état réel du connecteur (`En charge`, `En pause (limite 0 A)`,
+`Suspendue par la voiture`, `Défaut`), limite demandée et courant offert,
+énergie de la session, état de charge et courant par phase, ainsi que marque,
+modèle et firmware. Elle avertit quand la borne n'applique pas la limite
+demandée et, tant qu'aucune borne n'est connectée, affiche l'adresse websocket
+exacte à configurer — construite à partir de l'hôte avec lequel vous consultez
+Home Assistant. L'onglet Réglages suit lui aussi le mode et montre les champs
+OCPP à la place des entités de la borne.
 
 ## Plages horaires ARERA
 

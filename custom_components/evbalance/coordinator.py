@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
+from .actuator import ChargerActuator, EntityActuator, OcppActuator
 from .balancer import (
     BalancerConfig,
     BalancerInputs,
@@ -22,6 +23,8 @@ from .balancer import (
     watts_per_amp,
 )
 from .const import (
+    CONF_ALLOWED_BANDS,
+    CONF_CONTROL_MODE,
     CONF_CURRENT_STEPS,
     CONF_HOLD_SECONDS,
     CONF_MAX_CURRENT,
@@ -40,6 +43,8 @@ from .const import (
     CONF_EV_CHARGER_POWER,
     CONF_EV_CHARGER_SWITCH,
     CONF_EV_CHARGER_SWITCH_INVERT,
+    DEFAULT_ALLOWED_BANDS,
+    DEFAULT_CONTROL_MODE,
     DEFAULT_CURRENT_STEPS,
     DEFAULT_EV_CHARGER_SWITCH_INVERT,
     DEFAULT_HOLD_SECONDS,
@@ -53,8 +58,9 @@ from .const import (
     DEFAULT_UPDATE_INTERVAL,
     DEFAULT_VOLTAGE,
     DOMAIN,
+    MODE_OCPP,
 )
-from .energy import TariffScheme, active_band
+from .energy import TariffScheme, active_band, band_allowed
 from .tariff_loader import holidays_for_scheme, resolve_scheme
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,7 +77,9 @@ def _to_float(value: object) -> float | None:
 class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
     """Cuore dell'integrazione."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, csms=None
+    ) -> None:
         self.entry = entry
         interval = self._opt(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL)
         super().__init__(
@@ -82,7 +90,36 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         )
         self.state = BalancerState()
         self.balancing_enabled = True   # pilotato dallo switch
+        # Stop manuale: si sovrappone alla decisione del bilanciatore e la
+        # ricarica resta ferma finché non viene riattivata. Non è la stessa cosa
+        # di `balancing_enabled`, che invece smette del tutto di comandare.
+        self.charging_allowed = True
         self._last_ts: float | None = None
+        self.csms = csms
+        self.actuator: ChargerActuator = self._build_actuator()
+
+    @property
+    def control_mode(self) -> str:
+        return self._opt(CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE)
+
+    def _build_actuator(self) -> ChargerActuator:
+        """Sceglie come comandare la wallbox in base alla modalita' configurata."""
+        if self.control_mode == MODE_OCPP and self.csms is not None:
+            voltage = float(self._opt(CONF_VOLTAGE, DEFAULT_VOLTAGE))
+            return OcppActuator(
+                self.csms,
+                min_current=int(self._opt(CONF_MIN_CURRENT, DEFAULT_MIN_CURRENT)),
+                voltage=voltage,
+                phases=int(self._opt(CONF_PHASES, DEFAULT_PHASES)),
+            )
+        return EntityActuator(
+            self.hass,
+            number_entity=self._opt(CONF_EV_CHARGER_CURRENT),
+            switch_entity=self._opt(CONF_EV_CHARGER_SWITCH),
+            switch_invert=bool(
+                self._opt(CONF_EV_CHARGER_SWITCH_INVERT, DEFAULT_EV_CHARGER_SWITCH_INVERT)
+            ),
+        )
 
     # --- helper lettura config ---
     def _opt(self, key: str, default=None):
@@ -101,6 +138,11 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         )
 
     @property
+    def allowed_bands(self) -> list[str]:
+        """Fasce in cui si vuole ricaricare (vuoto = tutte)."""
+        return list(self._opt(CONF_ALLOWED_BANDS, DEFAULT_ALLOWED_BANDS) or [])
+
+    @property
     def tariff_preset(self) -> str:
         return self._opt(CONF_TARIFF_PRESET, DEFAULT_TARIFF_PRESET)
 
@@ -111,8 +153,10 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             self.hass, self.tariff_preset, self._opt(CONF_TARIFFS, None)
         )
 
-    def _read_w(self, entity_id: str) -> float:
-        """Legge un sensore di potenza in W (0 se non disponibile)."""
+    def _read_w(self, entity_id: str | None) -> float:
+        """Legge un sensore di potenza in W (0 se non configurato o assente)."""
+        if not entity_id:
+            return 0.0
         st = self.hass.states.get(entity_id)
         if st is None:
             return 0.0
@@ -153,7 +197,12 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
 
         per_source = {eid: self._read_w(eid) for eid in self.sources}
         sources_raw = sum(per_source.values())
-        ev_charger_w = self._read_w(self._opt(CONF_EV_CHARGER_POWER))
+
+        # In OCPP la potenza la misura la wallbox stessa: il sensore esterno
+        # resta come riserva, per le wallbox che non mandano telemetria.
+        ev_charger_w = self.actuator.read_power_w()
+        if ev_charger_w is None:
+            ev_charger_w = self._read_w(self._opt(CONF_EV_CHARGER_POWER))
 
         if self.sources_include_ev_charger:
             # La sorgente misura già anche la EV Charger (es. contatore/prelievo rete):
@@ -168,41 +217,28 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         inp = BalancerInputs(sources_w=sources_w, ev_charger_w=ev_charger_w)
         target = next_current(cfg, inp, self.state, now_mono)
 
-        # Attuazione (solo se il bilanciamento è abilitato dallo switch).
-        wb_number = self._opt(CONF_EV_CHARGER_CURRENT)
-        wb_switch = self._opt(CONF_EV_CHARGER_SWITCH)
-        switch_invert = bool(
-            self._opt(CONF_EV_CHARGER_SWITCH_INVERT, DEFAULT_EV_CHARGER_SWITCH_INVERT)
-        )
-        paused = self.state.charging_blocked
-
-        if self.balancing_enabled:
-            if wb_switch:
-                # Con lo switch di pausa fermiamo davvero la ricarica quando la
-                # corrente scende sotto il minimo: scrivere un valore < minimo sul
-                # number non spegne la wallbox, che continuerebbe a erogare al
-                # minimo facendo scattare il contatore.
-                if paused:
-                    # Metti in pausa. Non tocchiamo la corrente: resta l'ultimo
-                    # valore valido, pronto per la ripresa.
-                    await self._set_charging(wb_switch, False, switch_invert)
-                else:
-                    # Prima assicura una corrente valida, poi (ri)attiva la ricarica,
-                    # così alla ripresa non si parte mai sopra il budget.
-                    if wb_number:
-                        await self._sync_current(wb_number, target)
-                    await self._set_charging(wb_switch, True, switch_invert)
-            elif wb_number:
-                # Comportamento legacy senza switch: scrivi il valore calcolato
-                # (target oppure la corrente di pausa).
-                await self._sync_current(wb_number, target)
-
         now_local = dt_util.now()
         scheme = self.tariff_scheme
         holidays = holidays_for_scheme(scheme, now_local.year)
         band = active_band(scheme, now_local, holidays)
 
-        return {
+        # La fascia oraria concorre alla decisione, quindi va calcolata prima
+        # di attuare: fuori dalle fasce ammesse la ricarica si ferma.
+        allowed = self.allowed_bands
+        band_ok = band_allowed(band, allowed)
+
+        # Attuazione (solo se il bilanciamento è abilitato dallo switch).
+        paused = self.state.charging_blocked or not self.charging_allowed or not band_ok
+        if not self.charging_allowed:
+            self.state.reasons.append("ricarica fermata manualmente")
+        if not band_ok:
+            self.state.reasons.append(
+                f"fascia {band} non tra quelle ammesse ({', '.join(allowed)})"
+            )
+        if self.balancing_enabled:
+            await self.actuator.async_apply(target, paused)
+
+        data = {
             "per_source": per_source,
             "sources_w": sources_w,
             "ev_charger_w": ev_charger_w,
@@ -210,61 +246,26 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             "applied_current": self.state.applied_current,
             "target_current": target,
             "charging_blocked": self.state.charging_blocked,
+            "charging_allowed": self.charging_allowed,
+            "charging_paused": paused,
+            "band_allowed": band_ok,
+            "allowed_bands": allowed,
             "active_band": band,
             "active_band_rank": scheme.rank_of(band),
             "reasons": list(self.state.reasons),
             "elapsed_s": elapsed,
             "balancing_enabled": self.balancing_enabled,
             "max_power_w": cfg.max_power_w,
+            "control_mode": self.control_mode,
+            "charger_available": self.actuator.available,
         }
+        data.update(self.actuator.diagnostics())
+        return data
 
-    async def _sync_current(self, number_entity: str, amps: int) -> None:
-        """Scrive la corrente sul number solo se il valore attuale è diverso."""
-        current_set = self.hass.states.get(number_entity)
-        current_val = _to_float(current_set.state) if current_set else None
-        if current_val is None or int(current_val) != amps:
-            await self._write_current(number_entity, amps)
-
-    async def _set_charging(self, entity_id: str, charging: bool, invert: bool) -> None:
-        """Attiva o mette in pausa la ricarica tramite lo switch della wallbox.
-
-        `charging=True` -> ricarica attiva. Con `invert` lo stato ON dello switch
-        rappresenta la pausa, quindi il significato di on/off viene ribaltato.
-        Chiamiamo il servizio solo se lo stato attuale è diverso da quello voluto,
-        per non inondare la wallbox di comandi a ogni ciclo.
-        """
-        want_on = charging != invert  # XOR: invert ribalta il significato di ON
-        desired = "on" if want_on else "off"
-        st = self.hass.states.get(entity_id)
-        if st is not None and st.state == desired:
-            return
-        service = "turn_on" if want_on else "turn_off"
-        try:
-            await self.hass.services.async_call(
-                "homeassistant",
-                service,
-                {"entity_id": entity_id},
-                blocking=True,
-            )
-            _LOGGER.debug(
-                "EV Charger switch %s -> %s (ricarica=%s)", entity_id, desired, charging
-            )
-        except Exception as err:  # noqa: BLE001 - non deve mai far cadere il ciclo
-            _LOGGER.warning(
-                "Impossibile impostare lo switch %s a %s: %s", entity_id, desired, err
-            )
-
-    async def _write_current(self, number_entity: str, amps: int) -> None:
-        try:
-            await self.hass.services.async_call(
-                "number",
-                "set_value",
-                {"entity_id": number_entity, "value": amps},
-                blocking=True,
-            )
-            _LOGGER.debug("EV Charger %s -> %sA (%s)", number_entity, amps, self.state.reasons)
-        except Exception as err:  # noqa: BLE001 - non deve mai far cadere il ciclo
-            _LOGGER.warning("Impossibile impostare %s a %sA: %s", number_entity, amps, err)
+    async def async_set_charging_allowed(self, allowed: bool) -> None:
+        """Consente o ferma la ricarica a mano (chiamato dallo switch)."""
+        self.charging_allowed = allowed
+        await self.async_request_refresh()
 
     async def async_set_balancing(self, enabled: bool) -> None:
         """Abilita/disabilita l'attuazione (chiamato dallo switch)."""

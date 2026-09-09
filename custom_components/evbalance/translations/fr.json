@@ -3,6 +3,14 @@
     "step": {
       "user": {
         "title": "EV Balance",
+        "description": "Comment piloter la borne ?",
+        "menu_options": {
+          "entities": "Via les entités Home Assistant",
+          "ocpp": "Directement en OCPP 1.6 (la borne se connecte à EV Balance)"
+        }
+      },
+      "entities": {
+        "title": "EV Balance",
         "description": "Configurez l'équilibreur de charge pour votre EV Charger.",
         "data": {
           "name": "Nom",
@@ -16,10 +24,33 @@
           "min_current": "Courant de charge minimal (A)",
           "max_current": "Courant de charge maximal (A)"
         }
+      },
+      "ocpp": {
+        "title": "Pilotage OCPP 1.6",
+        "description": "EV Balance ouvre un serveur OCPP : configurez la borne pour qu'elle se connecte à ws://<adresse-ha>:<port>/<Charge Point ID>. Dans ce mode, la pause est une limite de 0 A : aucun interrupteur n'est nécessaire et le minimum de 6 A n'est plus un problème.",
+        "data": {
+          "name": "Nom",
+          "ocpp_port": "Port du serveur OCPP",
+          "ocpp_cp_id": "Charge Point ID (vide = accepter n'importe quelle borne)",
+          "ocpp_password": "Mot de passe OCPP (s'il est défini sur la borne)",
+          "ocpp_use_ha_port": "Utiliser le port de Home Assistant au lieu d'un port dédié",
+          "sources": "Sources de consommation",
+          "sources_include_ev_charger": "La source inclut déjà la EV Charger (ex. compteur principal / soutirage réseau)",
+          "max_power_w": "Limite maximale du compteur (W)",
+          "voltage": "Tension de ligne (V)",
+          "phases": "Alimentation",
+          "min_current": "Courant de charge minimal (A)",
+          "max_current": "Courant de charge maximal (A)",
+          "ev_charger_power_entity": "Capteur de puissance de la EV Charger (W)"
+        },
+        "data_description": {
+          "ocpp_cp_id": "Doit correspondre exactement (casse comprise) à l'identifiant configuré dans la borne. Laissez vide pour accepter la première borne qui se connecte : c'est le moyen le plus rapide de découvrir l'ID réellement utilisé."
+        }
       }
     },
     "error": {
-      "min_ge_max": "Le courant minimal doit être inférieur au maximal."
+      "min_ge_max": "Le courant minimal doit être inférieur au maximal.",
+      "invalid_port": "Port invalide (1-65535)."
     }
   },
   "options": {
@@ -35,27 +66,62 @@
           "hold_seconds": "Attente avant d'augmenter le courant (s)",
           "update_interval": "Intervalle de mise à jour de la mesure de consommation (s)",
           "tariff_preset": "Tarif à plages horaires",
-          "show_panel": "Afficher le panneau dans la barre latérale"
+          "show_panel": "Afficher le panneau dans la barre latérale",
+          "ocpp_port": "Port du serveur OCPP",
+          "ocpp_cp_id": "Charge Point ID (vide = accepter n'importe quelle borne)",
+          "ocpp_password": "Mot de passe OCPP (s'il est défini sur la borne)",
+          "ocpp_use_ha_port": "Utiliser le port de Home Assistant au lieu d'un port dédié",
+          "ocpp_connector": "Connecteur à piloter",
+          "ocpp_meter_interval": "Intervalle de télémétrie de la borne (s)",
+          "allowed_bands": "Charger uniquement dans ces plages"
         },
         "data_description": {
-          "current_steps": "Valeurs en ampères séparées par des virgules (ex. 6, 8, 10, 13, 16). Le courant est arrondi vers le bas au palier autorisé le plus proche. Laissez vide pour utiliser chaque entier du minimum au maximum."
+          "current_steps": "Valeurs en ampères séparées par des virgules (ex. 6, 8, 10, 13, 16). Le courant est arrondi vers le bas au palier autorisé le plus proche. Laissez vide pour utiliser chaque entier du minimum au maximum.",
+          "ocpp_cp_id": "Doit correspondre exactement (casse comprise) à l'identifiant configuré dans la borne. Laissez vide pour accepter la première borne qui se connecte : c'est le moyen le plus rapide de découvrir l'ID réellement utilisé.",
+          "allowed_bands": "Aucune sélectionnée : la charge a lieu dans toutes les plages."
         }
       }
     }
   },
   "entity": {
     "switch": {
-      "balancing": { "name": "Équilibrage activé" }
+      "balancing": {
+        "name": "Équilibrage activé"
+      },
+      "charging_allowed": {
+        "name": "Charge autorisée"
+      }
     },
     "binary_sensor": {
-      "charging_blocked": { "name": "Charge en pause" }
+      "charging_blocked": {
+        "name": "Charge en pause"
+      },
+      "ocpp_connected": {
+        "name": "Borne connectée (OCPP)"
+      }
     },
     "sensor": {
-      "total_power": { "name": "Puissance totale" },
-      "sources_power": { "name": "Puissance des sources" },
-      "ev_charger_power": { "name": "Puissance de la EV Charger" },
-      "target_current": { "name": "Courant accordé" },
-      "active_band": { "name": "Plage tarifaire active" }
+      "total_power": {
+        "name": "Puissance totale"
+      },
+      "sources_power": {
+        "name": "Puissance des sources"
+      },
+      "ev_charger_power": {
+        "name": "Puissance de la EV Charger"
+      },
+      "target_current": {
+        "name": "Courant accordé"
+      },
+      "active_band": {
+        "name": "Plage tarifaire active"
+      },
+      "ocpp_status": {
+        "name": "État de la borne (OCPP)"
+      },
+      "ocpp_session_energy": {
+        "name": "Énergie de la session"
+      }
     }
   }
 }

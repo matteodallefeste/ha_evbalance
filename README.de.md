@@ -78,15 +78,75 @@ In jedem Zyklus (Standard alle 3 s) führt die Integration Folgendes aus:
 | Quelle enthält Wallbox | aus | Wie oben, später änderbar |
 | Sicherheitsmarge | 200 W | Unter dem Zählerlimit frei gehaltene Reserve, fängt Spitzen ab |
 | Pausenstrom | 0 A | Wert, der zum „Stoppen“ des Ladens in Pause geschrieben wird (manche Wallboxen brauchen einen Wert > 0) |
+| Nur in diesen Zeitfenstern laden | (alle) | Tarif-Zeitfenster, in denen geladen werden darf; keines gewählt = alle |
 | Erlaubte Stromstufen | (leer) | Kommagetrennte Liste erlaubter Ampere (z. B. `6, 8, 10, 16`); leer = jede Ganzzahl von min bis max |
 | Hold seconds | 300 s | Mindestwartezeit, bevor der Strom wieder erhöht werden darf (Anti-Flattern) |
 | Aktualisierungsintervall | 3 s | Wie oft die Leistung gelesen und der Strom angewendet wird (mindestens 3 s) |
 | Tarif-Preset | ARERA F1/F2/F3 | Zeitfenster-Satz für die Energieerfassung (ARERA oder Einzeltarif) |
 | Panel anzeigen | ein | Blendet das EV-Balance-Panel in der Seitenleiste ein/aus |
 
+## OCPP-Steuerung (direkte Verbindung zur Wallbox)
+
+Statt die Wallbox über Home-Assistant-Entitäten zu steuern, kann EV Balance
+**direkt OCPP 1.6J mit ihr sprechen**. Der Modus wird beim Hinzufügen der
+Integration gewählt: *Direkt über OCPP 1.6*.
+
+EV Balance betreibt ein kleines **CSMS** (das zentrale OCPP-System): die Wallbox
+verbindet sich per WebSocket damit — ohne Hersteller-Integration und ohne Cloud.
+
+**Warum das wichtig ist.** Bei der Steuerung über Entitäten ist das Pausieren
+unterhalb des Wallbox-Minimums ein Problem: 0 A in ein `number` mit Minimum 6 A
+zu schreiben stoppt den Ladevorgang nicht, die Wallbox liefert weiter ihr
+Minimum zusätzlich zum Haushalt und der Zähler löst aus. In OCPP ist die Pause
+einfach ein **Ladeprofil mit 0 A**: die Wallbox unterbricht die Abgabe
+(`SuspendedEVSE`) und hält die Sitzung offen; zum Fortsetzen wird das Limit
+wieder angehoben — kein Schalter, keine erneute Autorisierung, kein Ausstecken.
+
+**Einrichtung**
+
+1. Integration hinzufügen und *Direkt über OCPP 1.6* wählen.
+2. Die Wallbox auf `ws://<home-assistant-adresse>:<port>/<Charge-Point-ID>`
+   richten (Standardport 9000). Bei Wallbox-Geräten steht das in der App unter
+   *Einstellungen → Externe Verwaltung → OCPP*.
+3. Die Charge-Point-ID muss exakt mit der hier konfigurierten übereinstimmen,
+   **auch in der Groß-/Kleinschreibung**. Feld leer lassen, um die erste
+   Wallbox zu akzeptieren, die sich verbindet.
+
+| Parameter | Standard | Wozu |
+|---|---|---|
+| Port des OCPP-Servers | 9000 | Port, zu dem die Wallbox verbindet |
+| Charge-Point-ID | (leer) | Erwartete Kennung; leer akzeptiert jede Wallbox |
+| OCPP-Passwort | (leer) | Basic Auth, falls in der Wallbox gesetzt |
+| Port von Home Assistant verwenden | aus | OCPP über Port 8123 unter `/api/evbalance/ocpp/<id>` statt eines eigenen Ports — praktisch im Container-Betrieb |
+| Anschluss | 1 | Zu steuernder Anschluss |
+| Telemetrie-Intervall | 10 s | Wie oft die Wallbox MeterValues meldet |
+
+**Was es zusätzlich zur Pause bringt**
+
+- **Telemetrie direkt aus der Wallbox**: Wirkleistung, Strom und Spannung pro
+  Phase, Energiezählerstand und Ladezustand, sofern gemeldet. Ein separater
+  Leistungssensor wird optional (bleibt als Rückfallebene).
+- **Echter Anschlusszustand** — `Charging`, `SuspendedEV` (das Auto stoppt),
+  `SuspendedEVSE` (wir haben pausiert), `Faulted`.
+- **Sitzungsenergie** aus den Zählerregistern der Wallbox.
+- **Prüfung des angewendeten Limits**: das angeforderte Limit wird mit dem
+  verglichen, was die Wallbox anzubieten meldet; bei Abweichung wird das Profil
+  erneut gesendet.
+- **Herstellerunabhängigkeit**: derselbe Code für jede OCPP-1.6J-Wallbox.
+
+> Eine Wallbox spricht in der Regel mit genau einem Backend: zeigt sie auf Home
+> Assistant, steuert die Hersteller-Cloud das Laden nicht mehr. Keine zweite
+> OCPP-Integration gleichzeitig auf derselben Wallbox betreiben.
+
+Warum sich eine Wallbox nicht verbindet, klärt die eigenständige Sonde
+[`tools/ocpp_probe.py`](tools/ocpp_probe.py): sie braucht nur Python und gibt
+Handshake und alle OCPP-Nachrichten aus.
+
 ## Erstellte Entitäten
 
 - **Switch** *Balancing aktiv* — bei AUS wird gelesen, aber die Wallbox nicht angesteuert.
+- **Switch** *Laden erlaubt* — bei AUS bleibt die Wallbox stehen, auch wenn
+  Budget vorhanden wäre; die Wahl überlebt einen Neustart.
 - **Binary Sensor** *Laden pausiert* — mit dem Attribut `reasons` (erklärt die Entscheidung).
 - **Number** *Maximales Zählerlimit*, *Sicherheitsmarge* — Live-Tuning.
 - **Sensor** Gesamt-/Quellen-/Wallbox-Leistung, *Erlaubter Strom*, *Aktiver Tarif*.
@@ -100,6 +160,16 @@ Element, ohne Build-Schritt), das Live-Leistung, erlaubten Strom, Zählerlimit
 und die Energie pro Tarif der letzten Monate anzeigt. Es liest alles aus
 vorhandenen Entitäten und den Langzeitstatistiken des Recorders — kein
 zusätzlicher Speicher. Ein-/ausschaltbar über die Optionen (*Panel anzeigen*).
+
+Im **OCPP-Modus** erhält der Live-Tab eine Wallbox-Karte: Verbindungsstatus,
+echter Anschlusszustand (`Lädt`, `Pausiert (0-A-Limit)`, `Vom Auto
+unterbrochen`, `Störung`), angefordertes gegen angebotenes Limit, Energie der
+Ladesitzung, Ladestand und Strom je Phase sowie Hersteller, Modell und
+Firmware. Sie warnt, wenn die Wallbox das angeforderte Limit nicht anwendet,
+und zeigt, solange keine Wallbox verbunden ist, die genaue WebSocket-Adresse
+zum Eintragen — gebildet aus dem Host, über den du Home Assistant gerade
+aufrufst. Auch der Einstellungen-Tab folgt dem Modus und zeigt die
+OCPP-Felder statt der Wallbox-Entitäten.
 
 ## ARERA-Zeitfenster
 

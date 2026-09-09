@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime
 
 from homeassistant.components.sensor import (
@@ -22,7 +21,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
-from .const import DOMAIN
+from .const import DOMAIN, MODE_OCPP
 from .energy import energy_increment_kwh, preset_bands
 from .entity import EVBalanceEntity
 
@@ -42,6 +41,10 @@ async def async_setup_entry(
         EVCurrentSensor(coordinator),
         EVBandSensor(coordinator),
     ]
+
+    if coordinator.control_mode == MODE_OCPP:
+        entities.append(OcppStatusSensor(coordinator))
+        entities.append(OcppSessionEnergySensor(coordinator))
 
     # Sorgenti di energia da tracciare: totale, EV Charger e ogni sorgente.
     energy_keys: list[tuple[str, str]] = [
@@ -128,7 +131,91 @@ class EVBandSensor(EVBalanceEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict:
         data = self.coordinator.data or {}
-        return {"rank": data.get("active_band_rank")}
+        return {
+            "rank": data.get("active_band_rank"),
+            # Il pannello ne ha bisogno per dire "fuori fascia" invece di un
+            # generico "in pausa".
+            "allowed": data.get("band_allowed", True),
+            "allowed_bands": data.get("allowed_bands", []),
+        }
+
+
+class OcppStatusSensor(EVBalanceEntity, SensorEntity):
+    """Stato del connettore riportato dalla wallbox via OCPP.
+
+    E' l'informazione che con il controllo per entità non si ha: distingue
+    "auto scollegata" da "in pausa per nostra decisione" (SuspendedEVSE), da
+    "l'auto ha smesso di assorbire" (SuspendedEV), da un guasto.
+    """
+
+    _attr_translation_key = "ocpp_status"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:ev-plug-type2"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "ocpp_status")
+
+    def _ocpp(self) -> dict:
+        return (self.coordinator.data or {}).get("ocpp") or {}
+
+    @property
+    def native_value(self) -> str | None:
+        # Volutamente non è un ENUM: le wallbox aggiungono stati propri e non
+        # vogliamo che un valore inatteso diventi "sconosciuto".
+        return self._ocpp().get("status")
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = self._ocpp()
+        boot = data.get("boot_info") or {}
+        return {
+            "charge_point_id": data.get("cp_id"),
+            "vendor": boot.get("vendor"),
+            "model": boot.get("model"),
+            "firmware": boot.get("firmware"),
+            "error_code": data.get("error_code"),
+            "vehicle_connected": data.get("vehicle_connected"),
+            "requested_limit_a": data.get("desired_limit_a"),
+            "current_offered_a": data.get("current_offered_a"),
+            "limit_confirmed": data.get("limit_confirmed"),
+            "limit_error": data.get("limit_error"),
+            "currents_a": data.get("currents"),
+            "soc": data.get("soc"),
+            "supports_smart_charging": data.get("supports_smart_charging"),
+            "supports_phase_switching": data.get("supports_phase_switching"),
+        }
+
+
+class OcppSessionEnergySensor(EVBalanceEntity, SensorEntity):
+    """Energia della ricarica in corso, dai contatori della wallbox.
+
+    Viene dal registro di energia della wallbox e dal `meterStart` della
+    transazione, quindi non è una stima: riparte da zero a ogni sessione.
+    """
+
+    _attr_translation_key = "ocpp_session_energy"
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 3
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "ocpp_session_energy")
+
+    @property
+    def native_value(self) -> float | None:
+        data = (self.coordinator.data or {}).get("ocpp") or {}
+        value = data.get("session_energy_kwh")
+        return None if value is None else round(float(value), 4)
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        data = (self.coordinator.data or {}).get("ocpp") or {}
+        return {
+            "transaction_id": data.get("transaction_id"),
+            "id_tag": data.get("id_tag"),
+            "meter_wh": data.get("energy_wh"),
+        }
 
 
 class EVEnergySensor(EVBalanceEntity, RestoreSensor):

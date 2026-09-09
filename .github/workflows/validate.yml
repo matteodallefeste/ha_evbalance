@@ -28,3 +28,15 @@ jobs:
         run: pip install jsonschema
       - name: Validate tariff presets
         run: python tools/validate_tariffs.py
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install pyflakes
+        run: pip install pyflakes
+      - name: Check for undefined and unused names
+        run: python -m pyflakes custom_components/evbalance tools tests

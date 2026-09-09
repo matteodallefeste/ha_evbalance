@@ -3,6 +3,14 @@
     "step": {
       "user": {
         "title": "EV Balance",
+        "description": "Wie soll die Wallbox gesteuert werden?",
+        "menu_options": {
+          "entities": "Über Home-Assistant-Entitäten",
+          "ocpp": "Direkt über OCPP 1.6 (die Wallbox verbindet sich mit EV Balance)"
+        }
+      },
+      "entities": {
+        "title": "EV Balance",
         "description": "Konfiguriere den Lastausgleich für deine EV Charger.",
         "data": {
           "name": "Name",
@@ -16,10 +24,33 @@
           "min_current": "Minimaler Ladestrom (A)",
           "max_current": "Maximaler Ladestrom (A)"
         }
+      },
+      "ocpp": {
+        "title": "OCPP-1.6-Steuerung",
+        "description": "EV Balance betreibt einen OCPP-Server: Richte die Wallbox auf ws://<ha-adresse>:<port>/<Charge-Point-ID>. In diesem Modus ist die Pause ein Limit von 0 A – es wird kein Schalter benötigt und das 6-A-Minimum ist kein Problem mehr.",
+        "data": {
+          "name": "Name",
+          "ocpp_port": "Port des OCPP-Servers",
+          "ocpp_cp_id": "Charge-Point-ID (leer = beliebige Wallbox akzeptieren)",
+          "ocpp_password": "OCPP-Passwort (falls in der Wallbox gesetzt)",
+          "ocpp_use_ha_port": "Port von Home Assistant statt eines eigenen verwenden",
+          "sources": "Verbrauchsquellen",
+          "sources_include_ev_charger": "Quelle enthält die EV Charger bereits (z. B. Hauptzähler / Netzbezug)",
+          "max_power_w": "Maximale Zählergrenze (W)",
+          "voltage": "Netzspannung (V)",
+          "phases": "Versorgung",
+          "min_current": "Minimaler Ladestrom (A)",
+          "max_current": "Maximaler Ladestrom (A)",
+          "ev_charger_power_entity": "EV Charger-Leistungssensor (W)"
+        },
+        "data_description": {
+          "ocpp_cp_id": "Muss exakt (auch Groß-/Kleinschreibung) der in der Wallbox konfigurierten Kennung entsprechen. Leer lassen, um die erste Wallbox zu akzeptieren, die sich verbindet – so findest du am schnellsten die tatsächliche ID heraus."
+        }
       }
     },
     "error": {
-      "min_ge_max": "Der minimale Strom muss kleiner als der maximale sein."
+      "min_ge_max": "Der minimale Strom muss kleiner als der maximale sein.",
+      "invalid_port": "Ungültiger Port (1-65535)."
     }
   },
   "options": {
@@ -35,27 +66,62 @@
           "hold_seconds": "Wartezeit vor dem Erhöhen des Stroms (s)",
           "update_interval": "Aktualisierungsintervall der Verbrauchsmessung (s)",
           "tariff_preset": "Zeitabhängiger Tarif",
-          "show_panel": "Panel in der Seitenleiste anzeigen"
+          "show_panel": "Panel in der Seitenleiste anzeigen",
+          "ocpp_port": "Port des OCPP-Servers",
+          "ocpp_cp_id": "Charge-Point-ID (leer = beliebige Wallbox akzeptieren)",
+          "ocpp_password": "OCPP-Passwort (falls in der Wallbox gesetzt)",
+          "ocpp_use_ha_port": "Port von Home Assistant statt eines eigenen verwenden",
+          "ocpp_connector": "Zu steuernder Anschluss",
+          "ocpp_meter_interval": "Telemetrie-Intervall der Wallbox (s)",
+          "allowed_bands": "Nur in diesen Zeitfenstern laden"
         },
         "data_description": {
-          "current_steps": "Kommagetrennte Ampere-Werte (z. B. 6, 8, 10, 13, 16). Der Strom wird auf die nächstniedrigere zulässige Stufe abgerundet. Leer lassen, um jeden ganzzahligen Wert von Minimum bis Maximum zu verwenden."
+          "current_steps": "Kommagetrennte Ampere-Werte (z. B. 6, 8, 10, 13, 16). Der Strom wird auf die nächstniedrigere zulässige Stufe abgerundet. Leer lassen, um jeden ganzzahligen Wert von Minimum bis Maximum zu verwenden.",
+          "ocpp_cp_id": "Muss exakt (auch Groß-/Kleinschreibung) der in der Wallbox konfigurierten Kennung entsprechen. Leer lassen, um die erste Wallbox zu akzeptieren, die sich verbindet – so findest du am schnellsten die tatsächliche ID heraus.",
+          "allowed_bands": "Keines gewählt: es wird in allen Zeitfenstern geladen."
         }
       }
     }
   },
   "entity": {
     "switch": {
-      "balancing": { "name": "Lastausgleich aktiv" }
+      "balancing": {
+        "name": "Lastausgleich aktiv"
+      },
+      "charging_allowed": {
+        "name": "Laden erlaubt"
+      }
     },
     "binary_sensor": {
-      "charging_blocked": { "name": "Laden pausiert" }
+      "charging_blocked": {
+        "name": "Laden pausiert"
+      },
+      "ocpp_connected": {
+        "name": "Wallbox verbunden (OCPP)"
+      }
     },
     "sensor": {
-      "total_power": { "name": "Gesamtleistung" },
-      "sources_power": { "name": "Leistung der Quellen" },
-      "ev_charger_power": { "name": "EV Charger-Leistung" },
-      "target_current": { "name": "Gewährter Strom" },
-      "active_band": { "name": "Aktive Tarifzone" }
+      "total_power": {
+        "name": "Gesamtleistung"
+      },
+      "sources_power": {
+        "name": "Leistung der Quellen"
+      },
+      "ev_charger_power": {
+        "name": "EV Charger-Leistung"
+      },
+      "target_current": {
+        "name": "Gewährter Strom"
+      },
+      "active_band": {
+        "name": "Aktive Tarifzone"
+      },
+      "ocpp_status": {
+        "name": "Wallbox-Status (OCPP)"
+      },
+      "ocpp_session_energy": {
+        "name": "Energie der Ladesitzung"
+      }
     }
   }
 }

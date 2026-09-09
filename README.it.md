@@ -77,15 +77,77 @@ Ad ogni ciclo (default ogni 3 s) l'integrazione:
 | La sorgente include la EV Charger | off | Come sopra, modificabile in seguito |
 | Margine di sicurezza | 200 W | Riserva lasciata libera sotto il limite contatore, assorbe i picchi |
 | Corrente di pausa | 0 A | Valore scritto per "fermare" la ricarica in pausa (alcune EV Charger richiedono un valore > 0) |
+| Ricarica solo in queste fasce | (tutte) | Fasce in cui è consentito ricaricare; nessuna selezionata = tutte |
 | Step di corrente ammessi | (vuoto) | Elenco di Ampere ammessi separati da virgola (es. `6, 8, 10, 16`); vuoto = ogni intero da min a max |
 | Hold seconds | 300 s | Attesa minima prima di poter rialzare la corrente (anti-flapping) |
 | Intervallo di aggiornamento | 3 s | Ogni quanto legge la potenza e applica la corrente (minimo 3 s) |
 | Preset fasce | ARERA F1/F2/F3 | Set di fasce orarie per il conteggio energia (ARERA o fascia unica) |
 | Mostra pannello | on | Mostra/nasconde il pannello EV Balance nella sidebar |
 
+## Controllo OCPP (collegamento diretto alla wallbox)
+
+Invece di pilotare la wallbox tramite entità di Home Assistant, EV Balance può
+**parlarle direttamente in OCPP 1.6J**. La modalità si sceglie quando si
+aggiunge l'integrazione: *Direttamente in OCPP 1.6*.
+
+EV Balance avvia un piccolo **CSMS** (il sistema centrale OCPP): la wallbox si
+collega a lui via websocket, senza integrazioni del produttore né servizi cloud.
+
+**Perché conta.** Con il controllo per entità, mettere in pausa sotto il minimo
+della wallbox è un problema: scrivere 0 A su un `number` che ha minimo 6 A non
+ferma la ricarica, la wallbox continua a erogare il minimo sopra ai consumi di
+casa e il contatore scatta. In OCPP la pausa è semplicemente un **charging
+profile con limite 0 A**: la wallbox sospende l'erogazione (`SuspendedEVSE`)
+tenendo aperta la sessione, e si riprende rialzando il limite — senza switch,
+senza riautorizzazione, senza staccare il cavo.
+
+**Come si configura**
+
+1. Aggiungi l'integrazione e scegli *Direttamente in OCPP 1.6*.
+2. Punta la wallbox su `ws://<indirizzo-home-assistant>:<porta>/<Charge Point ID>`
+   (porta 9000 di default). Sulle wallbox Wallbox si imposta dall'app, in
+   *Impostazioni → Gestione esterna → OCPP*.
+3. Il Charge Point ID deve coincidere con quello configurato qui, **maiuscole
+   comprese**. Lascia il campo vuoto per accettare la prima wallbox che si
+   collega: è il modo più rapido per scoprire quale ID manda davvero.
+
+| Parametro | Default | A cosa serve |
+|---|---|---|
+| Porta del server OCPP | 9000 | Porta a cui si collega la wallbox |
+| Charge Point ID | (vuoto) | Identificativo atteso; vuoto accetta qualsiasi wallbox |
+| Password OCPP | (vuota) | Basic auth, se impostata sulla wallbox |
+| Usa la porta di Home Assistant | off | Espone l'OCPP sulla 8123 sotto `/api/evbalance/ocpp/<id>` invece di una porta dedicata — comodo se Home Assistant gira in container |
+| Connettore | 1 | Connettore da pilotare |
+| Intervallo telemetria | 10 s | Ogni quanto la wallbox manda i MeterValues |
+
+**Cosa si guadagna oltre alla pausa**
+
+- **Telemetria dalla wallbox stessa**: potenza attiva, corrente e tensione per
+  fase, registro di energia e stato di carica quando la wallbox lo riporta. Il
+  sensore di potenza esterno diventa opzionale (resta come riserva).
+- **Stato reale del connettore** — `Charging`, `SuspendedEV` (l'auto ha smesso),
+  `SuspendedEVSE` (l'abbiamo messa in pausa noi), `Faulted` — invece di dedurlo
+  dai watt.
+- **Energia di sessione** presa dai contatori della wallbox.
+- **Verifica del limite applicato**: il limite chiesto viene confrontato con
+  quello che la wallbox dichiara di offrire e, se non coincidono, il profilo
+  viene rimandato. Alcune wallbox ignorano il nuovo limite riprendendo da 0 A.
+- **Indipendenza dal modello**: lo stesso codice vale per qualsiasi wallbox
+  OCPP 1.6J.
+
+> Una wallbox parla di norma con un solo backend: puntandola su Home Assistant,
+> il cloud del produttore non gestisce più la ricarica. Non tenere attiva
+> un'altra integrazione OCPP sulla stessa wallbox.
+
+Per capire perché una wallbox non si collega c'è la sonda autonoma
+[`tools/ocpp_probe.py`](tools/ocpp_probe.py): non richiede nulla oltre a Python
+e stampa l'handshake e tutti i messaggi OCPP.
+
 ## Entità create
 
 - **Switch** *Bilanciamento attivo* — se OFF legge ma non tocca la EV Charger.
+- **Switch** *Ricarica consentita* — se OFF ferma la ricarica anche quando ci
+  sarebbe budget; la scelta viene mantenuta al riavvio.
 - **Binary sensor** *Ricarica in pausa* — con l'attributo `reasons` (spiega la decisione).
 - **Number** *Limite massimo contatore*, *Margine di sicurezza* — tuning live.
 - **Sensor** potenza totale/sorgenti/EV Charger, *Corrente concessa*, *Fascia attiva*.
@@ -99,6 +161,16 @@ nessuno step di build) che mostra potenza live, corrente concessa, limite
 contatore e l'energia per fascia degli ultimi mesi. Legge tutto dalle entità
 esistenti e dalle long-term statistics del Recorder — nessuno storage extra. Si
 attiva/disattiva dalle opzioni (*Mostra pannello*).
+
+In **modalità OCPP** il tab Live guadagna una card della wallbox: stato del
+collegamento, stato reale del connettore (`In carica`, `In pausa (limite 0 A)`,
+`Sospesa dall'auto`, `Guasto`), limite richiesto e corrente offerta, energia
+della sessione, stato di carica e corrente per fase, più marca, modello e
+firmware. Avvisa quando la wallbox non sta applicando il limite richiesto e,
+finché nessuna wallbox è collegata, mostra l'indirizzo websocket esatto da
+configurare — costruito sull'host con cui stai guardando Home Assistant,
+quindi è già quello giusto da digitare. Anche il tab Impostazioni segue la
+modalità, mostrando i campi OCPP al posto delle entità della wallbox.
 
 ## Fasce orarie ARERA
 

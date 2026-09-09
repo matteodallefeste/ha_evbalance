@@ -77,15 +77,75 @@ On every cycle (default every 3 s) the integration:
 | Source includes EV Charger | off | Same as above, editable later |
 | Safety margin | 200 W | Reserve kept free under the meter limit, absorbs spikes |
 | Pause current | 0 A | Value written to "stop" charging when paused (some chargers need a value > 0) |
+| Charge only in these bands | (all) | Tariff bands charging is allowed in; none selected = every band |
 | Allowed current steps | (empty) | Comma-separated list of allowed Amperes (e.g. `6, 8, 10, 16`); empty = every integer from min to max |
 | Hold seconds | 300 s | Minimum wait before the current can be raised again (anti-flapping) |
 | Update interval | 3 s | How often power is read and current applied (minimum 3 s) |
 | Tariff preset | ARERA F1/F2/F3 | Time-band set for energy tracking (ARERA or single flat band) |
 | Show panel | on | Show/hide the EV Balance panel in the sidebar |
 
+## OCPP control (direct connection to the charger)
+
+Instead of driving the charger through Home Assistant entities, EV Balance can
+**speak OCPP 1.6J directly with it**. Pick the mode when you add the
+integration: *Directly over OCPP 1.6*.
+
+EV Balance runs a small **CSMS** (the OCPP central system): the charger connects
+to it over a websocket, so no vendor integration or cloud service is involved.
+
+**Why it matters.** With entity control, pausing below the charger's minimum is
+a problem: writing 0 A to a `number` whose minimum is 6 A does not stop
+charging, so the charger keeps drawing its minimum on top of the rest of the
+house and trips the meter. In OCPP the pause is simply a **charging profile with
+a 0 A limit**: the charger suspends delivery (`SuspendedEVSE`) while keeping the
+session open, and charging resumes by raising the limit again — no switch, no
+re-authorisation, no unplugging.
+
+**Setting it up**
+
+1. Add the integration and choose *Directly over OCPP 1.6*.
+2. Point the charger at `ws://<home-assistant-address>:<port>/<Charge Point ID>`
+   (default port 9000). On Wallbox chargers this lives in the app under
+   *Settings → External Management → OCPP*.
+3. The Charge Point ID must match the one configured here, **case included**.
+   Leave the field empty to accept the first charger that connects — the
+   quickest way to find out which ID it actually sends.
+
+| Parameter | Default | What it's for |
+|---|---|---|
+| OCPP server port | 9000 | Port the charger connects to |
+| Charge Point ID | (empty) | Expected identity; empty accepts any charger |
+| OCPP password | (empty) | Basic auth, if the charger is configured with one |
+| Use the Home Assistant port | off | Serve OCPP on port 8123 under `/api/evbalance/ocpp/<id>` instead of a dedicated port — handy when Home Assistant runs in a container |
+| Connector | 1 | Connector to control |
+| Telemetry interval | 10 s | How often the charger is asked to report MeterValues |
+
+**What you get on top of the pause**
+
+- **Telemetry from the charger itself**: active power, per-phase current and
+  voltage, energy register, and state of charge when the charger reports it. A
+  separate power sensor becomes optional (it stays as a fallback).
+- **Real connector state** — `Charging`, `SuspendedEV` (the car stopped),
+  `SuspendedEVSE` (we paused it), `Faulted` — instead of guessing from watts.
+- **Session energy** taken from the charger's own meter registers.
+- **Applied-limit verification**: the requested limit is compared against what
+  the charger reports offering; if they disagree, the profile is sent again.
+  Some chargers ignore the new limit when resuming from 0 A.
+- **Charger-independence**: the same code works with any OCPP 1.6J charger.
+
+> A charger normally talks to a single backend: pointing it at Home Assistant
+> means the vendor cloud no longer manages charging. Do not run another OCPP
+> integration on the same charger at the same time.
+
+Diagnosing a charger that does not connect is easier with the standalone probe
+in [`tools/ocpp_probe.py`](tools/ocpp_probe.py): it needs nothing but Python and
+prints the handshake and every OCPP message.
+
 ## Created entities
 
 - **Switch** *Balancing active* — when OFF it reads but does not touch the EV Charger.
+- **Switch** *Charging allowed* — OFF pauses the charger regardless of the
+  available budget; the choice survives a restart.
 - **Binary sensor** *Charging paused* — with the `reasons` attribute (explains the decision).
 - **Number** *Meter maximum limit*, *Safety margin* — live tuning.
 - **Sensor** total/sources/EV-Charger power, *Allowed current*, *Active band*.
@@ -99,6 +159,16 @@ build step) showing live power, allowed current, meter limit and the per-band
 energy of the last months. It reads everything from existing entities and the
 Recorder long-term statistics — no extra storage. Toggle it from the options
 (*Show panel*).
+
+In **OCPP mode** the Live tab gains a charger card: link state, real connector
+state (`Charging`, `Paused (0 A limit)`, `Suspended by the car`, `Fault`),
+requested versus offered current, session energy, state of charge and current
+per phase, plus vendor, model and firmware. It warns when the charger is not
+applying the requested limit, and while no charger is connected it shows the
+exact websocket address to configure — built from the host you are browsing
+Home Assistant with, so it is already the right one to type in. The Settings
+tab follows the mode too, showing the OCPP fields instead of the charger
+entities.
 
 ## ARERA time bands
 

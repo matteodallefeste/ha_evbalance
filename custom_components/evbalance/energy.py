@@ -298,6 +298,19 @@ def active_band(
     return scheme.fallback
 
 
+def band_allowed(band: str | None, allowed: Any) -> bool:
+    """La fascia corrente è tra quelle in cui si vuole ricaricare?
+
+    Un elenco vuoto (o assente) significa "nessun vincolo": è il comportamento
+    storico e il default, così chi non usa questa funzione non se ne accorge.
+    Una fascia sconosciuta non è ammessa quando un vincolo esiste: meglio non
+    caricare che caricare nell'ora sbagliata.
+    """
+    if not allowed:
+        return True
+    return band is not None and band in set(allowed)
+
+
 def energy_increment_kwh(power_w: float, seconds: float) -> float:
     """Energia (kWh) accumulata da ``power_w`` costante per ``seconds`` secondi."""
     if power_w <= 0 or seconds <= 0:
