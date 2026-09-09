@@ -40,3 +40,5 @@ jobs:
         run: pip install pyflakes
       - name: Check for undefined and unused names
         run: python -m pyflakes custom_components/evbalance tools tests
+      - name: Validate translations
+        run: python tools/check_translations.py

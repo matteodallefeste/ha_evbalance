@@ -22,12 +22,13 @@
           "voltage": "Netzspannung (V)",
           "phases": "Versorgung",
           "min_current": "Minimaler Ladestrom (A)",
-          "max_current": "Maximaler Ladestrom (A)"
+          "max_current": "Maximaler Ladestrom (A)",
+          "ev_charger_switch_entity": "Schalter zum Pausieren/Fortsetzen des Ladens (optional)"
         }
       },
       "ocpp": {
         "title": "OCPP-1.6-Steuerung",
-        "description": "EV Balance betreibt einen OCPP-Server: Richte die Wallbox auf ws://<ha-adresse>:<port>/<Charge-Point-ID>. In diesem Modus ist die Pause ein Limit von 0 A – es wird kein Schalter benötigt und das 6-A-Minimum ist kein Problem mehr.",
+        "description": "EV Balance betreibt einen OCPP-Server: Richte die Wallbox auf ws://[ha-adresse]:[port]/[Charge-Point-ID]. In diesem Modus ist die Pause ein Limit von 0 A – es wird kein Schalter benötigt und das 6-A-Minimum ist kein Problem mehr.",
         "data": {
           "name": "Name",
           "ocpp_port": "Port des OCPP-Servers",
@@ -73,12 +74,15 @@
           "ocpp_use_ha_port": "Port von Home Assistant statt eines eigenen verwenden",
           "ocpp_connector": "Zu steuernder Anschluss",
           "ocpp_meter_interval": "Telemetrie-Intervall der Wallbox (s)",
-          "allowed_bands": "Nur in diesen Zeitfenstern laden"
+          "allowed_bands": "Nur in diesen Zeitfenstern laden",
+          "ev_charger_switch_entity": "Schalter zum Pausieren/Fortsetzen des Ladens (optional)",
+          "ev_charger_switch_invert": "Schalter invertiert (EIN = pausiert)"
         },
         "data_description": {
           "current_steps": "Kommagetrennte Ampere-Werte (z. B. 6, 8, 10, 13, 16). Der Strom wird auf die nächstniedrigere zulässige Stufe abgerundet. Leer lassen, um jeden ganzzahligen Wert von Minimum bis Maximum zu verwenden.",
           "ocpp_cp_id": "Muss exakt (auch Groß-/Kleinschreibung) der in der Wallbox konfigurierten Kennung entsprechen. Leer lassen, um die erste Wallbox zu akzeptieren, die sich verbindet – so findest du am schnellsten die tatsächliche ID heraus.",
-          "allowed_bands": "Keines gewählt: es wird in allen Zeitfenstern geladen."
+          "allowed_bands": "Keines gewählt: es wird in allen Zeitfenstern geladen.",
+          "ev_charger_switch_entity": "Schalter, der das Laden der Wallbox startet bzw. pausiert. Sinkt der verfügbare Strom unter das Minimum, wird das Laden pausiert, statt unter das Minimum zu gehen (die Wallbox würde ihr Minimum weiter beziehen und den Zähler auslösen); es wird fortgesetzt, sobald der Strom wieder über dem Minimum liegt. Leer lassen, wenn die Wallbox beim Schreiben des Pausenstroms bereits stoppt."
         }
       }
     }

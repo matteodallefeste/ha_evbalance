@@ -22,12 +22,13 @@
           "voltage": "Tensión de línea (V)",
           "phases": "Alimentación",
           "min_current": "Corriente mínima de carga (A)",
-          "max_current": "Corriente máxima de carga (A)"
+          "max_current": "Corriente máxima de carga (A)",
+          "ev_charger_switch_entity": "Interruptor de pausa/reanudación de carga (opcional)"
         }
       },
       "ocpp": {
         "title": "Control OCPP 1.6",
-        "description": "EV Balance abre un servidor OCPP: configura el cargador para que se conecte a ws://<dirección-ha>:<puerto>/<Charge Point ID>. En este modo la pausa es un límite de 0 A, así que no hace falta ningún interruptor y el mínimo de 6 A deja de ser un problema.",
+        "description": "EV Balance abre un servidor OCPP: configura el cargador para que se conecte a ws://[dirección-ha]:[puerto]/[Charge Point ID]. En este modo la pausa es un límite de 0 A, así que no hace falta ningún interruptor y el mínimo de 6 A deja de ser un problema.",
         "data": {
           "name": "Nombre",
           "ocpp_port": "Puerto del servidor OCPP",
@@ -73,12 +74,15 @@
           "ocpp_use_ha_port": "Usar el puerto de Home Assistant en lugar de uno dedicado",
           "ocpp_connector": "Conector a controlar",
           "ocpp_meter_interval": "Intervalo de telemetría del cargador (s)",
-          "allowed_bands": "Cargar solo en estas franjas"
+          "allowed_bands": "Cargar solo en estas franjas",
+          "ev_charger_switch_entity": "Interruptor de pausa/reanudación de carga (opcional)",
+          "ev_charger_switch_invert": "Interruptor invertido (ON = en pausa)"
         },
         "data_description": {
           "current_steps": "Valores de amperios separados por comas (p. ej. 6, 8, 10, 13, 16). La corriente se redondea hacia abajo al paso permitido más cercano. Déjalo vacío para usar cada entero desde el mínimo al máximo.",
           "ocpp_cp_id": "Debe coincidir exactamente (mayúsculas incluidas) con el identificador configurado en el cargador. Déjalo vacío para aceptar el primer cargador que se conecte: es la forma más rápida de descubrir qué ID usa realmente.",
-          "allowed_bands": "Ninguna seleccionada: se carga en todas las franjas."
+          "allowed_bands": "Ninguna seleccionada: se carga en todas las franjas.",
+          "ev_charger_switch_entity": "Interruptor que inicia o pausa la carga del cargador. Cuando la corriente disponible baja del mínimo, la carga se pausa en lugar de bajar de ese mínimo (el cargador seguiría entregando su mínimo y haría saltar el contador); se reanuda en cuanto la corriente vuelve a estar por encima del mínimo. Déjalo vacío si tu cargador ya se detiene al escribir la corriente de pausa."
         }
       }
     }

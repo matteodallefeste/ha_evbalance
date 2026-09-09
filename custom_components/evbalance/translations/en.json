@@ -28,7 +28,7 @@
       },
       "ocpp": {
         "title": "OCPP 1.6 control",
-        "description": "EV Balance runs an OCPP server: point the charger at ws://<ha-address>:<port>/<Charge Point ID>. In this mode pausing is a 0 A limit, so no switch is needed and the 6 A minimum is no longer a problem.",
+        "description": "EV Balance runs an OCPP server: point the charger at ws://[ha-address]:[port]/[Charge Point ID]. In this mode pausing is a 0 A limit, so no switch is needed and the 6 A minimum is no longer a problem.",
         "data": {
           "name": "Name",
           "ocpp_port": "OCPP server port",

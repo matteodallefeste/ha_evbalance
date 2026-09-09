@@ -10,6 +10,18 @@ users.
 
 ## [Unreleased]
 
+## [26.9.2] - 2026-09-09
+
+### Fixed
+- `hassfest` rejected the OCPP setup step: its `<address>:<port>` placeholders
+  matched Home Assistant's "no HTML in translations" rule. They now use square
+  brackets. Added `tools/check_translations.py`, which applies the same regex
+  Home Assistant uses plus a key-parity check across languages, and runs in CI
+  so this is caught locally instead of after a release.
+- Completed the German, French and Spanish translations of the charging
+  pause/resume switch, missing since 26.7.14 — found by the new key-parity
+  check.
+
 ## [26.9.1] - 2026-09-09
 
 ### Added

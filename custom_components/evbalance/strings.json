@@ -28,7 +28,7 @@
       },
       "ocpp": {
         "title": "Controllo OCPP 1.6",
-        "description": "EV Balance apre un server OCPP: configura la wallbox perché si colleghi a ws://<indirizzo-ha>:<porta>/<Charge Point ID>. In questa modalità la pausa è un limite di 0 A, quindi non serve alcuno switch e il minimo di 6 A non è più un problema.",
+        "description": "EV Balance apre un server OCPP: configura la wallbox perché si colleghi a ws://[indirizzo-ha]:[porta]/[Charge Point ID]. In questa modalità la pausa è un limite di 0 A, quindi non serve alcuno switch e il minimo di 6 A non è più un problema.",
         "data": {
           "name": "Nome",
           "ocpp_port": "Porta del server OCPP",
