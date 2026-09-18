@@ -348,6 +348,7 @@ def check_limit_applied(
     snapshot: MeterSnapshot,
     limit_a: float,
     *,
+    status: str | None = None,
     tolerance_a: float = 1.0,
     idle_current_a: float = 0.5,
 ) -> LimitCheck:
@@ -380,6 +381,15 @@ def check_limit_applied(
     if measured > limit_a + tolerance_a:
         return LimitCheck(
             False, f"chiesti {limit_a:.1f}A ma ne misuriamo {measured:.1f}"
+        )
+    if measured <= idle_current_a and status == STATUS_SUSPENDED_EVSE:
+        # La ripresa da 0 A e' proprio il caso che ci frega: la wallbox resta
+        # sospesa "di suo" (SuspendedEVSE) invece di ripartire col nuovo
+        # limite. SuspendedEV (l'auto che sceglie di non assorbire) resta
+        # invece un esito legittimo e non va segnalato come mismatch.
+        return LimitCheck(
+            False,
+            f"chiesti {limit_a:.1f}A ma la wallbox resta sospesa (SuspendedEVSE)",
         )
     return LimitCheck(True, f"misurati {measured:.1f}A entro il limite")
 

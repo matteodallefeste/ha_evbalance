@@ -268,6 +268,21 @@ def test_senza_misure_non_si_accusa_la_wallbox():
     assert check_limit_applied(MeterSnapshot(), 10.0).matches
 
 
+def test_ripresa_da_pausa_ignorata_viene_rilevata():
+    """Cambio fascia (es. F2 -> F3): si chiede corrente > 0 ma la wallbox
+    resta sospesa "di suo" invece di ripartire col nuovo limite."""
+    snap = MeterSnapshot(currents={"L1": 0.0})
+    esito = check_limit_applied(snap, 10.0, status="SuspendedEVSE")
+    assert not esito.matches
+    assert "sospesa" in esito.detail
+
+
+def test_auto_che_non_assorbe_non_e_un_mismatch():
+    """SuspendedEV e' una scelta dell'auto (es. batteria piena): non e' un bug."""
+    snap = MeterSnapshot(currents={"L1": 0.0})
+    assert check_limit_applied(snap, 10.0, status="SuspendedEV").matches
+
+
 # --- configurazione ----------------------------------------------------
 
 def test_parse_configuration():

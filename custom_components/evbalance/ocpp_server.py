@@ -219,7 +219,7 @@ class ChargePointSession:
         """Confronta il limite chiesto con quello che la wallbox sta facendo."""
         if self.desired_limit_a is None or not self.vehicle_connected:
             return
-        check = check_limit_applied(self.snapshot, self.desired_limit_a)
+        check = check_limit_applied(self.snapshot, self.desired_limit_a, status=self.status)
         if not check.matches:
             self.limit_confirmed = False
             self.last_limit_error = check.detail
