@@ -10,6 +10,19 @@ users.
 
 ## [Unreleased]
 
+## [26.9.3] - 2026-09-18
+
+### Fixed
+- OCPP mode: charging could stay stuck after switching from a disallowed to
+  an allowed time-of-use band (e.g. ARERA's F2 → F3). `check_limit_applied`
+  only flagged a mismatch when the charger drew *more* current than
+  requested, never when it stayed at 0 A after being asked to resume — so a
+  charger stuck in `SuspendedEVSE` looked "fine" and the retry
+  (`SetChargingProfile` every 30s) never fired. The check now also looks at
+  the connector status: `SuspendedEVSE` with a positive requested limit is
+  treated as unconfirmed and retried, while `SuspendedEV` (the vehicle's own
+  choice not to draw power) is still treated as normal.
+
 ## [26.9.2] - 2026-09-09
 
 ### Fixed
