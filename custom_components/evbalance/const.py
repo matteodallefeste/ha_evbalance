@@ -107,8 +107,13 @@ PANEL_ICON = "mdi:ev-station"
 PANEL_STATIC_URL = "/evbalance_static"       # URL base (cartella www/)
 PANEL_JS_FILENAME = "evbalance-panel.js"     # modulo principale del pannello
 PANEL_TRANSLATIONS_FILENAME = "evbalance-translations.js"  # modulo fratello
-# Il token anti-cache viene calcolato dal contenuto dei due moduli JS (vedi
-# panel.py): cambia da solo a ogni modifica, senza bump manuali. Questo valore
-# resta solo come ripiego se i file non fossero leggibili.
+PANEL_WALLBOX_FILENAME = "evbalance-wallbox.js"  # card wallbox, condivisa
+# Card Lovelace: stesso modulo condiviso, involucro da dashboard. Viene
+# registrata come risorsa frontend, così è disponibile come
+# `type: custom:evbalance-card` senza aggiungerla a mano.
+CARD_JS_FILENAME = "evbalance-card.js"
+# Il token anti-cache viene calcolato dal contenuto dei moduli JS qui sopra
+# (vedi panel.py): cambia da solo a ogni modifica, senza bump manuali. Questo
+# valore resta solo come ripiego se i file non fossero leggibili.
 PANEL_JS_VERSION = "16"
 WS_TYPE_PANEL = "evbalance/panel"             # comando websocket usato dal pannello

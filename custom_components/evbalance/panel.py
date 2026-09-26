@@ -26,12 +26,17 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant.components import panel_custom, websocket_api
-from homeassistant.components.frontend import async_remove_panel
+from homeassistant.components.frontend import (
+    add_extra_js_url,
+    async_remove_panel,
+    remove_extra_js_url,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from .const import (
+    CARD_JS_FILENAME,
     CONF_ALLOWED_BANDS,
     CONF_CONTROL_MODE,
     CONF_HOLD_SECONDS,
@@ -89,6 +94,7 @@ from .const import (
     PANEL_JS_FILENAME,
     PANEL_JS_VERSION,
     PANEL_TRANSLATIONS_FILENAME,
+    PANEL_WALLBOX_FILENAME,
     PANEL_STATIC_URL,
     PANEL_TITLE,
     PANEL_URL_PATH,
@@ -99,6 +105,7 @@ from .tariff_loader import get_presets
 
 WEBCOMPONENT_NAME = "evbalance-panel"
 _STATIC_FLAG = "static_registered"
+_CARD_FLAG = "card_registered"
 _WS_FLAG = "ws_registered"
 _LOCAL_IP_KEY = "local_ip"
 
@@ -503,13 +510,18 @@ def _panel_fingerprint() -> str:
     La cartella www/ è servita con header di cache lunghi: se l'URL del modulo
     non cambia, il browser continua a mostrare il pannello vecchio anche dopo
     un aggiornamento. Legandolo al contenuto dei file il token si aggiorna da
-    solo, senza dipendere da un numero di versione da ricordare. Il pannello
-    propaga lo stesso token all'import del modulo di traduzioni, così i due
+    solo, senza dipendere da un numero di versione da ricordare. Pannello e card
+    propagano lo stesso token ai moduli fratelli che importano, così tutti
     restano sempre allineati.
     """
     folder = os.path.join(os.path.dirname(__file__), "www")
     digest = hashlib.sha256()
-    for name in (PANEL_JS_FILENAME, PANEL_TRANSLATIONS_FILENAME):
+    for name in (
+        PANEL_JS_FILENAME,
+        PANEL_TRANSLATIONS_FILENAME,
+        PANEL_WALLBOX_FILENAME,
+        CARD_JS_FILENAME,
+    ):
         try:
             with open(os.path.join(folder, name), "rb") as handle:
                 digest.update(handle.read())
@@ -535,6 +547,36 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         sidebar_icon=PANEL_ICON,
         require_admin=False,
     )
+
+
+async def async_register_card(hass: HomeAssistant) -> None:
+    """Rende la card disponibile nelle dashboard come `custom:evbalance-card`.
+
+    Registrandola come risorsa del frontend non serve che l'utente la aggiunga
+    a mano alle risorse Lovelace: la trova già nel selettore delle card. È
+    indipendente dal pannello in sidebar, che si può tenere nascosto.
+
+    `add_extra_js_url` senza `es5` la serve come ES module, che è quello che
+    serve: la card importa i moduli fratelli. Teniamo da parte l'URL (token
+    anti-cache compreso) per poterlo togliere esattamente uguale.
+    """
+    await _async_register_static(hass)
+    data = hass.data.setdefault(DOMAIN, {})
+    if data.get(_CARD_FLAG):
+        return
+    version = await hass.async_add_executor_job(_panel_fingerprint)
+    url = f"{PANEL_STATIC_URL}/{CARD_JS_FILENAME}?v={version}"
+    add_extra_js_url(hass, url)
+    data[_CARD_FLAG] = url
+
+
+@callback
+def async_remove_card_if_present(hass: HomeAssistant) -> None:
+    """Toglie la risorsa della card, se registrata."""
+    data = hass.data.setdefault(DOMAIN, {})
+    url = data.pop(_CARD_FLAG, None)
+    if url:
+        remove_extra_js_url(hass, url)
 
 
 @callback

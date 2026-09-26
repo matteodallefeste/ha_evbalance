@@ -22,6 +22,15 @@ users.
   mode there is no reliable "charging finished" signal to expire it. The
   charger card in the panel gets a matching button, next to stop/resume; it
   is disabled while charging is stopped by hand, since the manual stop wins.
+- **Lovelace card** `custom:evbalance-card`: the charger card, for your own
+  dashboards instead of the sidebar panel — connector state, requested versus
+  offered current, session energy, state of charge, current per phase, and the
+  stop/resume and *Charge now* buttons. The integration registers the frontend
+  resource itself, so the card appears in the card picker with nothing to add
+  by hand, and it works with the sidebar panel hidden. Its content and logic
+  come from a module shared with the panel (`evbalance-wallbox.js`), so the two
+  cannot drift apart, while the colours follow the Home Assistant theme. OCPP
+  control mode only, like the switch.
 
 ## [26.9.3] - 2026-09-18
 

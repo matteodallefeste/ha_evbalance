@@ -41,8 +41,10 @@ from .const import (
 from .coordinator import EVBalanceCoordinator
 from .ocpp_server import OcppCsms, OcppView
 from .panel import (
+    async_register_card,
     async_register_panel,
     async_register_websocket,
+    async_remove_card_if_present,
     async_remove_panel_if_present,
 )
 from .tariff_loader import async_load_presets
@@ -146,6 +148,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
+    # La card per le dashboard è indipendente dal pannello in sidebar: chi
+    # tiene nascosto il pannello può comunque metterla in una dashboard.
+    await async_register_card(hass)
+
     if entry.options.get(CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL):
         await async_register_panel(hass)
     else:
@@ -156,6 +162,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     async_remove_panel_if_present(hass)
+    async_remove_card_if_present(hass)
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         data = hass.data.get(DOMAIN, {})

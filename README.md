@@ -170,6 +170,23 @@ Home Assistant with, so it is already the right one to type in. The Settings
 tab follows the mode too, showing the OCPP fields instead of the charger
 entities.
 
+## Dashboard card
+
+Besides the sidebar panel, the charger card is available as a **Lovelace card**
+for your own dashboards. The integration registers the resource itself, so it
+shows up in the card picker — no manual resource to add:
+
+```yaml
+type: custom:evbalance-card
+```
+
+It has no options: it shows the charger of the configured integration, with the
+same stop/resume and *Charge now* buttons as the panel. Card and panel share the
+same module ([`evbalance-wallbox.js`](custom_components/evbalance/www/evbalance-wallbox.js)),
+so they cannot drift apart; the card takes its colours from your Home Assistant
+theme. It needs the **OCPP control mode** — in entity mode it says so instead of
+showing an empty card.
+
 ## ARERA time bands
 
 | Band | When |

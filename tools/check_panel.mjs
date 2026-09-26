@@ -19,6 +19,7 @@ class FakeEl {
     this.value = "";
     this.checked = false;
   }
+  addEventListener() {}
 }
 globalThis.HTMLElement = class {};
 
@@ -37,9 +38,14 @@ globalThis.customElements = {
 };
 globalThis.document = { activeElement: null };
 globalThis.location = { hostname: "192.168.1.50", port: "8123" };
+// La card Lovelace si annuncia in window.customCards.
+globalThis.window = globalThis;
 
-const { EVBalancePanel } = await import("../custom_components/evbalance/www/evbalance-panel.js");
+const { EVBalancePanel, ready } = await import("../custom_components/evbalance/www/evbalance-panel.js");
 const { TR } = await import("../custom_components/evbalance/www/evbalance-translations.js");
+// La card della wallbox vive in un modulo importato a runtime: il pannello la
+// carica in _init(), che qui non passiamo. `ready()` fa la stessa cosa.
+await ready();
 
 function makePanel({ mode = "ocpp", config = {}, states = {}, entities = {}, meta = {} } = {}) {
   const p = Object.create(EVBalancePanel.prototype);
@@ -454,6 +460,109 @@ function makePanel({ mode = "ocpp", config = {}, states = {}, entities = {}, met
   p._updateLive();
   assert.equal(els["v-charge"].textContent, "Ferma");
   console.log("ok  il badge dice perché la ricarica è ferma");
+}
+
+// --- Card Lovelace ----------------------------------------------------
+const { EVBalanceCard } = await import("../custom_components/evbalance/www/evbalance-card.js");
+const WB = await import("../custom_components/evbalance/www/evbalance-wallbox.js");
+
+function makeCard({ mode = "ocpp", states = {}, entities = {}, config = {} } = {}) {
+  const c = Object.create(EVBalanceCard.prototype);
+  c._tr = TR;
+  c._wb = WB;
+  c._meta = { control_mode: mode, entities, local_ip: "192.168.1.50" };
+  c._config = { control_mode: mode, ocpp_port: 9000, ocpp_cp_id: "PULSAR", ...config };
+  c._hass = { language: "it", states };
+  const els = {};
+  c.shadowRoot = {
+    innerHTML: "",
+    getElementById: (id) => (els[id] = els[id] || new FakeEl(id)),
+  };
+  return { c, els };
+}
+
+{
+  // Si registra col nome giusto e si annuncia nel selettore delle card.
+  assert.ok(customElements.get("evbalance-card"), "custom element non registrato");
+  const entry = (window.customCards || []).find((x) => x.type === "evbalance-card");
+  assert.ok(entry, "card assente da window.customCards");
+  assert.equal(entry.name, "EV Balance");
+  console.log("ok  card registrata come custom:evbalance-card");
+}
+
+{
+  // Un secondo caricamento del modulo non duplica né la define né l'annuncio.
+  const before = window.customCards.length;
+  await import("../custom_components/evbalance/www/evbalance-card.js?again=1");
+  assert.equal(
+    window.customCards.filter((x) => x.type === "evbalance-card").length,
+    1
+  );
+  assert.equal(window.customCards.length, before);
+  console.log("ok  ricaricare il modulo della card non duplica nulla");
+}
+
+{
+  const { c } = makeCard();
+  c.setConfig({ type: "custom:evbalance-card" });
+  assert.equal(typeof c.getCardSize(), "number");
+  c._render();
+  // Involucro nativo di Lovelace, e dentro lo stesso markup del pannello.
+  assert.match(c.shadowRoot.innerHTML, /<ha-card>/);
+  assert.match(c.shadowRoot.innerHTML, /id="ocpp-card"/);
+  assert.match(c.shadowRoot.innerHTML, /v-ocpp-status/);
+  assert.match(c.shadowRoot.innerHTML, /ocpp-now-btn/);
+  assert.match(c.shadowRoot.innerHTML, /Wallbox \(OCPP\)/);
+  console.log("ok  card resa dentro ha-card con il markup condiviso");
+}
+
+{
+  // Gli stessi stati del pannello devono dare la stessa lettura.
+  const ids = {
+    ocpp_connected: "binary_sensor.link",
+    ocpp_status: "sensor.stato",
+    ocpp_session_energy: "sensor.sessione",
+    charging_allowed: "switch.ricarica",
+    charge_now: "switch.ora",
+  };
+  const states = {
+    [ids.ocpp_connected]: { state: "on", attributes: {} },
+    [ids.ocpp_status]: {
+      state: "Charging",
+      attributes: { requested_limit_a: 10, current_offered_a: 10, soc: 62,
+        currents_a: { L1: 9.8 }, limit_confirmed: true },
+    },
+    [ids.ocpp_session_energy]: { state: "5.5", attributes: {} },
+    [ids.charging_allowed]: { state: "on", attributes: {} },
+    [ids.charge_now]: { state: "off", attributes: {} },
+  };
+  const { c, els } = makeCard({ states, entities: ids });
+  c._render();
+  c._update();
+
+  assert.equal(els["v-ocpp-link"].textContent, "Connessa");
+  assert.equal(els["v-ocpp-status"].textContent, "In carica");
+  assert.equal(els["v-ocpp-req"].textContent, "10 A");
+  assert.equal(els["v-ocpp-session"].textContent, "5,5 kWh");
+  assert.equal(els["v-ocpp-soc"].textContent, "62 %");
+  assert.equal(els["v-ocpp-phases"].textContent, "L1 9.8 A");
+  assert.equal(els["ocpp-charge-btn"].textContent, "Ferma la ricarica");
+  assert.equal(els["ocpp-now-btn"].textContent, "Ricarica ora");
+
+  // Wallbox scollegata: anche in dashboard si vede l'indirizzo da configurare.
+  states[ids.ocpp_connected].state = "off";
+  c._update();
+  assert.match(els["v-ocpp-warn"].textContent, /ws:\/\/192\.168\.1\.50:9000\/PULSAR/);
+  console.log("ok  card aggiornata come la card del pannello");
+}
+
+{
+  // Controllo per entità: la card lo dice invece di restare vuota.
+  const { c } = makeCard({ mode: "entities" });
+  assert.equal(c._isOcpp, false);
+  c._fail(c._t.cardOnlyOcpp);
+  assert.match(c.shadowRoot.innerHTML, /richiede il controllo OCPP/);
+  console.log("ok  card fuori modalità OCPP spiega perché non funziona");
 }
 
 console.log("\nTutti i controlli del pannello sono passati.");
