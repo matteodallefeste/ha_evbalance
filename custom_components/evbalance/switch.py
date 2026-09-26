@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, MODE_OCPP
 from .entity import EVBalanceEntity
 
 
@@ -21,7 +21,15 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BalancingSwitch(coordinator), ChargingSwitch(coordinator)])
+    entities: list[SwitchEntity] = [
+        BalancingSwitch(coordinator),
+        ChargingSwitch(coordinator),
+    ]
+    # Solo in OCPP la wallbox dice quando la sessione finisce: senza quel
+    # segnale "ricarica ora" non saprebbe quando spegnersi.
+    if coordinator.control_mode == MODE_OCPP:
+        entities.append(ChargeNowSwitch(coordinator))
+    async_add_entities(entities)
 
 
 class BalancingSwitch(EVBalanceEntity, SwitchEntity):
@@ -71,3 +79,28 @@ class ChargingSwitch(EVBalanceEntity, SwitchEntity, RestoreEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         await self.coordinator.async_set_charging_allowed(False)
+
+
+class ChargeNowSwitch(EVBalanceEntity, SwitchEntity):
+    """Ricarica ora: si carica anche fuori dalle fasce scelte.
+
+    Scavalca solo le fasce orarie, non il bilanciamento: la corrente resta
+    quella che il budget di casa consente. Si spegne da sé a fine sessione --
+    cavo staccato o auto che ha finito di assorbire -- e da lì si torna a
+    ricaricare come da programma.
+    """
+
+    _attr_translation_key = "charge_now"
+
+    def __init__(self, coordinator) -> None:
+        super().__init__(coordinator, "charge_now")
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.charge_now
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self.coordinator.async_set_charge_now(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self.coordinator.async_set_charge_now(False)

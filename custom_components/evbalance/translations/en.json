@@ -94,6 +94,9 @@
       },
       "charging_allowed": {
         "name": "Charging allowed"
+      },
+      "charge_now": {
+        "name": "Charge now"
       }
     },
     "binary_sensor": {

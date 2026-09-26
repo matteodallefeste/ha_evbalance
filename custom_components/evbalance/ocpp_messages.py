@@ -319,6 +319,17 @@ def supports_remote_trigger(config: dict[str, str]) -> bool:
     return "remotetrigger" in raw.replace(" ", "").lower()
 
 
+def session_over(status: str) -> bool:
+    """La sessione di ricarica e' finita per certo?
+
+    Due casi: non c'e' piu' un'auto collegata (cavo staccato), oppure la
+    transazione e' chiusa e si aspetta solo che il cavo venga tolto
+    (``Finishing``). Non dice nulla su un'auto che ha solo smesso di
+    assorbire: quella e' ``SuspendedEV`` e la sessione resta aperta.
+    """
+    return status not in CONNECTED_STATES or status == STATUS_FINISHING
+
+
 def next_sampled_data(current: str | None) -> str | None:
     """Elenco di measurand successivo da provare dopo un rifiuto."""
     if current is None:

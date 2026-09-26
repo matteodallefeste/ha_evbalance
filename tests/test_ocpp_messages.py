@@ -17,6 +17,7 @@ from ocpp_messages import (
     parse_configuration,
     parse_meter_values,
     sanitize_limit,
+    session_over,
     snapshot_without_flow,
     supports_phase_switching,
     supports_smart_charging,
@@ -275,6 +276,22 @@ def test_ripresa_da_pausa_ignorata_viene_rilevata():
     esito = check_limit_applied(snap, 10.0, status="SuspendedEVSE")
     assert not esito.matches
     assert "sospesa" in esito.detail
+
+
+def test_sessione_finita_col_cavo_staccato():
+    assert session_over("Available")
+    assert session_over("Unavailable")
+
+
+def test_sessione_finita_a_transazione_chiusa():
+    """`Finishing`: transazione chiusa, manca solo togliere il cavo."""
+    assert session_over("Finishing")
+
+
+@pytest.mark.parametrize("status", ["Preparing", "Charging", "SuspendedEV", "SuspendedEVSE"])
+def test_sessione_ancora_aperta(status):
+    """SuspendedEV e' l'auto che non assorbe, non la fine della sessione."""
+    assert not session_over(status)
 
 
 def test_auto_che_non_assorbe_non_e_un_mismatch():

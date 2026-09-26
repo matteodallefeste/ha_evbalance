@@ -10,6 +10,17 @@ users.
 
 ## [Unreleased]
 
+### Added
+- **Charge now** (OCPP control mode only): a new switch that charges outside
+  the chosen time-of-use bands, for when the car has to be ready before the
+  cheap hours come round. It overrides the bands only — the balancer still
+  caps the current to what the house budget allows, so the meter never trips —
+  and it switches itself back off at the end of the session, after which
+  charging follows the schedule again. The charger reports the end of a
+  session (cable unplugged, transaction closed, or the car itself no longer
+  drawing power), which is why the switch exists only in OCPP mode: in entity
+  mode there is no reliable "charging finished" signal to expire it.
+
 ## [26.9.3] - 2026-09-18
 
 ### Fixed

@@ -8,7 +8,8 @@
       "active_band": { "default": "mdi:clock-time-four-outline" }
     },
     "switch": {
-      "balancing": { "default": "mdi:scale-balance" }
+      "balancing": { "default": "mdi:scale-balance" },
+      "charge_now": { "default": "mdi:lightning-bolt" }
     },
     "binary_sensor": {
       "charging_blocked": { "default": "mdi:ev-station" }

@@ -61,9 +61,15 @@ from .const import (
     MODE_OCPP,
 )
 from .energy import TariffScheme, active_band, band_allowed
+from .ocpp_messages import STATUS_SUSPENDED_EV, session_over
 from .tariff_loader import holidays_for_scheme, resolve_scheme
 
 _LOGGER = logging.getLogger(__name__)
+
+# Quanto deve durare l'immobilita' dell'auto (SuspendedEV) prima di dire che la
+# ricarica e' finita e spegnere "ricarica ora" (s). Un SuspendedEV di passaggio
+# -- l'auto che si sveglia, o che condiziona la batteria -- non deve bastare.
+CHARGE_NOW_IDLE_SECONDS = 300.0
 
 
 def _to_float(value: object) -> float | None:
@@ -94,6 +100,11 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         # ricarica resta ferma finché non viene riattivata. Non è la stessa cosa
         # di `balancing_enabled`, che invece smette del tutto di comandare.
         self.charging_allowed = True
+        # "Ricarica ora": scavalca le fasce orarie fino a fine sessione. Non
+        # viene ripristinato al riavvio, perche' la sessione a cui si riferiva
+        # non c'e' piu'.
+        self.charge_now = False
+        self._charge_now_idle_since: float | None = None
         self._last_ts: float | None = None
         self.csms = csms
         self.actuator: ChargerActuator = self._build_actuator()
@@ -188,6 +199,31 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             ],
         )
 
+    def _charge_now_expired(self, now: float) -> bool:
+        """"Ricarica ora" ha esaurito il suo compito?
+
+        Dura una sessione sola: finisce col cavo staccato o con la transazione
+        chiusa, e a cavo inserito quando la fine carica la dichiara l'auto
+        smettendo di assorbire (``SuspendedEV``) per un tempo che escluda una
+        pausa di passaggio. Se la wallbox non e' collegata non si sa nulla e si
+        aspetta: una disconnessione non deve annullare la scelta dell'utente.
+        """
+        session = self.csms.charge_point if self.csms is not None else None
+        if session is None:
+            self._charge_now_idle_since = None
+            return False
+
+        if session_over(session.status):
+            return True
+
+        if session.status != STATUS_SUSPENDED_EV:
+            self._charge_now_idle_since = None
+            return False
+
+        if self._charge_now_idle_since is None:
+            self._charge_now_idle_since = now
+        return now - self._charge_now_idle_since >= CHARGE_NOW_IDLE_SECONDS
+
     async def _async_update_data(self) -> dict:
         now_mono = time.monotonic()
         elapsed = 0.0 if self._last_ts is None else now_mono - self._last_ts
@@ -227,10 +263,20 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         allowed = self.allowed_bands
         band_ok = band_allowed(band, allowed)
 
+        # "Ricarica ora" scavalca le fasce, non il bilanciamento: la corrente
+        # resta quella che il budget concede, così il contatore non scatta.
+        if self.charge_now and self._charge_now_expired(now_mono):
+            self.charge_now = False
+            _LOGGER.debug("Sessione finita: 'ricarica ora' torna alle fasce")
+        if self.charge_now:
+            band_ok = True
+
         # Attuazione (solo se il bilanciamento è abilitato dallo switch).
         paused = self.state.charging_blocked or not self.charging_allowed or not band_ok
         if not self.charging_allowed:
             self.state.reasons.append("ricarica fermata manualmente")
+        if self.charge_now:
+            self.state.reasons.append("ricarica ora attiva: fasce ignorate")
         if not band_ok:
             self.state.reasons.append(
                 f"fascia {band} non tra quelle ammesse ({', '.join(allowed)})"
@@ -248,6 +294,7 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
             "charging_blocked": self.state.charging_blocked,
             "charging_allowed": self.charging_allowed,
             "charging_paused": paused,
+            "charge_now": self.charge_now,
             "band_allowed": band_ok,
             "allowed_bands": allowed,
             "active_band": band,
@@ -265,6 +312,12 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
     async def async_set_charging_allowed(self, allowed: bool) -> None:
         """Consente o ferma la ricarica a mano (chiamato dallo switch)."""
         self.charging_allowed = allowed
+        await self.async_request_refresh()
+
+    async def async_set_charge_now(self, enabled: bool) -> None:
+        """Avvia (o annulla) la ricarica fuori fascia (chiamato dallo switch)."""
+        self.charge_now = enabled
+        self._charge_now_idle_since = None
         await self.async_request_refresh()
 
     async def async_set_balancing(self, enabled: bool) -> None:
