@@ -10,6 +10,8 @@ users.
 
 ## [Unreleased]
 
+## [26.9.4] - 2026-09-26
+
 ### Added
 - **Charge now** (OCPP control mode only): a new switch that charges outside
   the chosen time-of-use bands, for when the car has to be ready before the
