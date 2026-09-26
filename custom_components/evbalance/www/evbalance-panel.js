@@ -309,6 +309,7 @@ class EVBalancePanel extends HTMLElement {
         <div class="chart-head">
           <h2>${t.ocppTitle}</h2>
           <span class="badge idle" id="v-ocpp-link">—</span>
+          <button id="ocpp-now-btn" class="charge-btn now" hidden></button>
           <button id="ocpp-charge-btn" class="charge-btn" hidden></button>
         </div>
         <div class="tiles">
@@ -399,6 +400,24 @@ class EVBalancePanel extends HTMLElement {
       if (allowed != null) {
         btn.textContent = allowed ? t.ocppStop : t.ocppStart;
         btn.className = "charge-btn" + (allowed ? "" : " resume");
+      }
+    }
+
+    // "Ricarica ora": scavalca le fasce fino a fine sessione. Manca del tutto
+    // col controllo per entità, dove non esiste l'entità corrispondente.
+    const nowBtn = root.getElementById("ocpp-now-btn");
+    if (nowBtn) {
+      const nowSt = this._stateOf("charge_now");
+      const on = nowSt ? nowSt.state === "on" : null;
+      nowBtn.hidden = on == null;
+      if (on != null) {
+        nowBtn.textContent = on ? t.ocppChargeNowStop : t.ocppChargeNow;
+        nowBtn.className = "charge-btn" + (on ? "" : " now");
+        // Con la ricarica ferma a mano non avvierebbe nulla: lo stop vince.
+        // Annullarla resta invece sempre possibile.
+        const stopped = !!allowSt && allowSt.state === "off" && !on;
+        nowBtn.disabled = stopped;
+        nowBtn.title = stopped ? t.ocppStopped : "";
       }
     }
 
@@ -1036,6 +1055,11 @@ class EVBalancePanel extends HTMLElement {
       chargeBtn.addEventListener("click", () => this._toggleCharging());
     }
 
+    const nowBtn = this.shadowRoot.getElementById("ocpp-now-btn");
+    if (nowBtn) {
+      nowBtn.addEventListener("click", () => this._toggleChargeNow());
+    }
+
     // Handler dei tab.
     this.shadowRoot.querySelectorAll(".tab").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1544,6 +1568,24 @@ class EVBalancePanel extends HTMLElement {
     }
   }
 
+  // Accende o annulla "ricarica ora". Spegnerla non serve a fine sessione:
+  // il coordinator se ne accorge da solo e torna alle fasce.
+  async _toggleChargeNow() {
+    const id = this._meta && this._meta.entities && this._meta.entities.charge_now;
+    if (!id) return;
+    const st = this._hass.states[id];
+    const on = st ? st.state === "on" : false;
+    const btn = this.shadowRoot.getElementById("ocpp-now-btn");
+    if (btn) btn.disabled = true;
+    try {
+      await this._hass.callService("switch", on ? "turn_off" : "turn_on", {
+        entity_id: id,
+      });
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   async _toggleBalancing(on) {
     const id = this._meta && this._meta.entities && this._meta.entities.balancing;
     if (!id) return;
@@ -2008,6 +2050,8 @@ class EVBalancePanel extends HTMLElement {
           font-size:13px; font-weight:600; cursor:pointer; color:#fff;
           background:#f59e0b; }
         .charge-btn.resume { background:#22c78b; }
+        .charge-btn.now { background:#6366f1; }
+        .charge-btn + .charge-btn { margin-left:8px; }
         .charge-btn:disabled { opacity:.6; cursor:default; }
 
         /* Card OCPP */

@@ -19,7 +19,9 @@ users.
   charging follows the schedule again. The charger reports the end of a
   session (cable unplugged, transaction closed, or the car itself no longer
   drawing power), which is why the switch exists only in OCPP mode: in entity
-  mode there is no reliable "charging finished" signal to expire it.
+  mode there is no reliable "charging finished" signal to expire it. The
+  charger card in the panel gets a matching button, next to stop/resume; it
+  is disabled while charging is stopped by hand, since the manual stop wins.
 
 ## [26.9.3] - 2026-09-18
 

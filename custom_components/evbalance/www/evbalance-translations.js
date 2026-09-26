@@ -140,6 +140,8 @@ export const TR = {
     ocppStop: "Stop charging",
     ocppStart: "Resume charging",
     ocppStopped: "Stopped manually",
+    ocppChargeNow: "Charge now",
+    ocppChargeNowStop: "Cancel charge now",
     ocppGuideTitle: "How to set up the charger",
     ocppGuideIntro: "On the charger, under OCPP / external management:",
     ocppGuide: [
@@ -284,6 +286,8 @@ export const TR = {
     ocppStop: "Ferma la ricarica",
     ocppStart: "Riprendi la ricarica",
     ocppStopped: "Fermata a mano",
+    ocppChargeNow: "Ricarica ora",
+    ocppChargeNowStop: "Annulla ricarica ora",
     ocppGuideTitle: "Come configurare la colonnina",
     ocppGuideIntro: "Sulla wallbox, nella sezione OCPP / gestione esterna:",
     ocppGuide: [
@@ -428,6 +432,8 @@ export const TR = {
     ocppStop: "Arrêter la charge",
     ocppStart: "Reprendre la charge",
     ocppStopped: "Arrêtée manuellement",
+    ocppChargeNow: "Charger maintenant",
+    ocppChargeNowStop: "Annuler la charge immédiate",
     ocppGuideTitle: "Comment configurer la borne",
     ocppGuideIntro: "Sur la borne, dans la section OCPP / gestion externe :",
     ocppGuide: [
@@ -572,6 +578,8 @@ export const TR = {
     ocppStop: "Detener la carga",
     ocppStart: "Reanudar la carga",
     ocppStopped: "Detenida manualmente",
+    ocppChargeNow: "Cargar ahora",
+    ocppChargeNowStop: "Cancelar carga inmediata",
     ocppGuideTitle: "Cómo configurar el cargador",
     ocppGuideIntro: "En el cargador, en la sección OCPP / gestión externa:",
     ocppGuide: [
@@ -716,6 +724,8 @@ export const TR = {
     ocppStop: "Laden stoppen",
     ocppStart: "Laden fortsetzen",
     ocppStopped: "Manuell gestoppt",
+    ocppChargeNow: "Jetzt laden",
+    ocppChargeNowStop: "Jetzt laden abbrechen",
     ocppGuideTitle: "So richtest du die Wallbox ein",
     ocppGuideIntro: "In der Wallbox, im Bereich OCPP / externe Verwaltung:",
     ocppGuide: [

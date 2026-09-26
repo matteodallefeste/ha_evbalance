@@ -170,6 +170,7 @@ _LIVE_ENTITIES: dict[str, str] = {
     "charging_blocked": "binary_sensor",
     "balancing": "switch",
     "charging_allowed": "switch",
+    "charge_now": "switch",
     "ocpp_status": "sensor",
     "ocpp_session_energy": "sensor",
     "ocpp_connected": "binary_sensor",

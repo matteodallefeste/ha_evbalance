@@ -351,6 +351,58 @@ function makePanel({ mode = "ocpp", config = {}, states = {}, entities = {}, met
   console.log("ok  bottone ferma/riprendi coerente con lo switch");
 }
 
+// --- Bottone "ricarica ora" -------------------------------------------
+{
+  const ids = {
+    ocpp_connected: "binary_sensor.link",
+    ocpp_status: "sensor.stato",
+    charging_allowed: "switch.ricarica",
+    charge_now: "switch.ora",
+  };
+  const states = {
+    [ids.ocpp_connected]: { state: "on", attributes: {} },
+    [ids.ocpp_status]: { state: "SuspendedEVSE", attributes: { limit_confirmed: true } },
+    [ids.charging_allowed]: { state: "on", attributes: {} },
+    [ids.charge_now]: { state: "off", attributes: {} },
+  };
+  const p = makePanel({ states, entities: ids });
+  const els = { "ocpp-card": new FakeEl("ocpp-card") };
+  const root = { getElementById: (id) => (els[id] = els[id] || new FakeEl(id)) };
+  const set = (id, txt) => { root.getElementById(id).textContent = txt; };
+
+  p._updateOcpp(root, set);
+  assert.equal(els["ocpp-now-btn"].hidden, false);
+  assert.equal(els["ocpp-now-btn"].textContent, "Ricarica ora");
+  assert.match(els["ocpp-now-btn"].className, /now/);
+  assert.equal(els["ocpp-now-btn"].disabled, false);
+
+  // Attiva: il bottone passa ad annullarla e perde il colore da "avvia".
+  states[ids.charge_now].state = "on";
+  p._updateOcpp(root, set);
+  assert.equal(els["ocpp-now-btn"].textContent, "Annulla ricarica ora");
+  assert.doesNotMatch(els["ocpp-now-btn"].className, /now/);
+  assert.equal(els["ocpp-now-btn"].disabled, false);
+
+  // Ferma a mano: accenderla non avvierebbe nulla, quindi è disabilitata.
+  // Annullarla invece resta possibile.
+  states[ids.charging_allowed].state = "off";
+  states[ids.charge_now].state = "off";
+  p._updateOcpp(root, set);
+  assert.equal(els["ocpp-now-btn"].disabled, true);
+  assert.equal(els["ocpp-now-btn"].title, "Fermata a mano");
+  states[ids.charge_now].state = "on";
+  p._updateOcpp(root, set);
+  assert.equal(els["ocpp-now-btn"].disabled, false);
+
+  // Controllo per entità: l'entità non esiste e il bottone resta nascosto.
+  const senza = makePanel({ states, entities: { ocpp_status: ids.ocpp_status } });
+  const els2 = { "ocpp-card": new FakeEl("ocpp-card") };
+  const root2 = { getElementById: (id) => (els2[id] = els2[id] || new FakeEl(id)) };
+  senza._updateOcpp(root2, (id, txt) => { root2.getElementById(id).textContent = txt; });
+  assert.equal(els2["ocpp-now-btn"].hidden, true);
+  console.log("ok  bottone \"ricarica ora\" coerente con lo switch");
+}
+
 // --- Fasce ammesse alla ricarica --------------------------------------
 {
   const t = TR.it;
