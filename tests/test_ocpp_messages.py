@@ -294,6 +294,28 @@ def test_sessione_ancora_aperta(status):
     assert not session_over(status)
 
 
+def test_sospesa_senza_alcuna_misura_viene_rilevata():
+    """Il buco della prima versione: senza correnti il controllo non scattava,
+    ma una wallbox che non eroga e' proprio quella che non ne manda."""
+    esito = check_limit_applied(MeterSnapshot(), 14.0, status="SuspendedEVSE")
+    assert not esito.matches
+    assert "SuspendedEVSE" in esito.detail
+
+
+def test_sospesa_con_limite_zero_e_voluta():
+    assert check_limit_applied(MeterSnapshot(), 0.0, status="SuspendedEVSE").matches
+
+
+def test_in_attesa_di_avvio_non_e_un_mismatch():
+    """Preparing puo' essere un'autorizzazione che aspetta l'utente: non e' colpa
+    del limite e rimandarlo non servirebbe a niente."""
+    assert check_limit_applied(MeterSnapshot(), 14.0, status="Preparing").matches
+
+
+def test_senza_stato_il_comportamento_resta_quello_di_prima():
+    assert check_limit_applied(MeterSnapshot(), 14.0).matches
+
+
 def test_auto_che_non_assorbe_non_e_un_mismatch():
     """SuspendedEV e' una scelta dell'auto (es. batteria piena): non e' un bug."""
     snap = MeterSnapshot(currents={"L1": 0.0})

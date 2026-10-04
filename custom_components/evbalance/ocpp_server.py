@@ -60,6 +60,9 @@ RECEIVE_TIMEOUT = 300.0
 CALL_TIMEOUT = 30.0
 # Pausa prima di interrogare una wallbox appena avviata (s).
 BOOT_SETTLE_SECONDS = 1.0
+# Dopo un nuovo limite lo stato del connettore ci mette qualche secondo a
+# seguirlo: prima di giudicarlo "sospeso nonostante il limite" si aspetta (s).
+STATUS_GRACE_SECONDS = 20.0
 
 # Azioni che accettiamo dalla wallbox ma su cui non abbiamo nulla da dire.
 _ACK_ONLY = frozenset(
@@ -99,6 +102,11 @@ class ChargePointSession:
         self.desired_limit_a: float | None = None
         self.limit_confirmed: bool = True
         self.last_limit_error: str | None = None
+        # Chiede all'attuatore di rimandare il limite anche se non e' cambiato:
+        # succede quando l'auto viene inserita, perche' molte wallbox perdono il
+        # profilo proprio in quel momento.
+        self.reassert_pending: bool = False
+        self._limit_set_at: float | None = None
         self._sampled_data: str | None = None
         self._tx_counter = 0
 
@@ -176,6 +184,7 @@ class ChargePointSession:
 
         if status == "Accepted":
             self.desired_limit_a = amps
+            self._limit_set_at = time.monotonic()
             self.csms.remember_limit(self.cp_id, amps)
             self.limit_confirmed = True
             self.last_limit_error = None
@@ -215,11 +224,26 @@ class ChargePointSession:
             {"requestedMessage": "MeterValues", "connectorId": self.csms.connector},
         )
 
+    def consume_reassert(self) -> bool:
+        """True (una volta sola) se il limite va riaffermato perche' e' arrivata un'auto."""
+        pending, self.reassert_pending = self.reassert_pending, False
+        return pending
+
     def verify_limit(self) -> None:
         """Confronta il limite chiesto con quello che la wallbox sta facendo."""
         if self.desired_limit_a is None or not self.vehicle_connected:
             return
-        check = check_limit_applied(self.snapshot, self.desired_limit_a, status=self.status)
+        # Lo stato del connettore segue un nuovo limite con qualche secondo di
+        # ritardo: finche' non e' trascorso non e' un indizio affidabile.
+        settled = (
+            self._limit_set_at is None
+            or time.monotonic() - self._limit_set_at >= STATUS_GRACE_SECONDS
+        )
+        check = check_limit_applied(
+            self.snapshot,
+            self.desired_limit_a,
+            status=self.status if settled else None,
+        )
         if not check.matches:
             self.limit_confirmed = False
             self.last_limit_error = check.detail
@@ -319,10 +343,17 @@ class ChargePointSession:
                 0,
                 self.csms.connector,
             ):
+                previous = self.status
                 self.status = str(payload.get("status", self.status))
                 error = payload.get("errorCode")
                 self.error_code = None if error in (None, "NoError") else str(error)
-                _LOGGER.debug("%s: stato -> %s", self.cp_id, self.status)
+                if self.status != previous:
+                    _LOGGER.info("%s: stato %s -> %s", self.cp_id, previous, self.status)
+                    if previous not in CONNECTED_STATES and self.status in CONNECTED_STATES:
+                        self.reassert_pending = True
+                    # Un cambio di stato e' un'informazione nuova anche se la
+                    # wallbox non manda MeterValues (ferma, non ne manda).
+                    self.verify_limit()
             return {}
 
         if action == "MeterValues":

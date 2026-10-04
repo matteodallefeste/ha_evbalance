@@ -427,3 +427,95 @@ async def test_senza_wallbox_il_csms_non_e_connesso():
     async with running_csms() as csms:
         assert not csms.connected
         assert csms.charge_point is None
+
+
+# --- auto attaccata a una wallbox che non parte -------------------------
+
+async def _status(cp, status: str) -> None:
+    await cp.call(
+        "StatusNotification",
+        {"connectorId": 1, "errorCode": "NoError", "status": status},
+    )
+
+
+@pytest.mark.asyncio
+async def test_auto_collegata_chiede_di_riapplicare_il_limite():
+    """Molte wallbox perdono il profilo quando l'auto viene inserita: il limite
+    mandato prima va riaffermato, altrimenti la ricarica non parte."""
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await _status(cp, "Available")
+            assert not session.reassert_pending
+
+            await _status(cp, "Preparing")
+            assert session.reassert_pending
+
+            # Passare da uno stato "collegata" a un altro non e' un'altra spina.
+            assert session.consume_reassert()
+            await _status(cp, "Charging")
+            assert not session.reassert_pending
+
+
+@pytest.mark.asyncio
+async def test_sospesa_dalla_wallbox_senza_misure_non_e_confermata(monkeypatch):
+    """Senza MeterValues non ci sono correnti: lo stato e' l'unico indizio."""
+    monkeypatch.setattr(ocpp_server, "STATUS_GRACE_SECONDS", 0.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await session.async_set_limit(14)
+            assert session.limit_confirmed
+
+            await _status(cp, "SuspendedEVSE")
+            assert not session.limit_confirmed
+            assert "SuspendedEVSE" in session.last_limit_error
+
+
+@pytest.mark.asyncio
+async def test_il_cambio_di_stato_ha_il_tempo_di_seguire_il_limite(monkeypatch):
+    """Subito dopo un nuovo limite la wallbox e' ancora in transizione: non e'
+    un'accusa, e non deve far lampeggiare l'avviso nel pannello."""
+    monkeypatch.setattr(ocpp_server, "STATUS_GRACE_SECONDS", 60.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await session.async_set_limit(14)
+            await _status(cp, "SuspendedEVSE")
+            assert session.limit_confirmed
+
+
+@pytest.mark.asyncio
+async def test_sospesa_con_limite_zero_e_quello_che_volevamo(monkeypatch):
+    monkeypatch.setattr(ocpp_server, "STATUS_GRACE_SECONDS", 0.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await session.async_set_limit(0)
+            await _status(cp, "SuspendedEVSE")
+            assert session.limit_confirmed
+
+
+@pytest.mark.asyncio
+async def test_attuatore_riaffonda_il_limite_quando_si_inserisce_l_auto():
+    """Il caso reale, dall'inizio alla fine: limite gia' mandato, poi l'auto
+    viene attaccata. Prima di questa correzione non partiva nulla fino a un
+    riavvio di Home Assistant, perche' l'attuatore non rimanda un valore uguale."""
+    actuator = importlib.import_module("evbalance_pkg.actuator")
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            act = actuator.OcppActuator(csms, min_current=6, voltage=230.0, phases=1)
+
+            await act.async_apply(14, paused=False)
+            mandati = len(cp.calls_for("SetChargingProfile"))
+            await act.async_apply(14, paused=False)
+            assert len(cp.calls_for("SetChargingProfile")) == mandati   # nulla di nuovo
+
+            await _status(cp, "Available")
+            await _status(cp, "Preparing")        # l'auto viene attaccata
+            await act.async_apply(14, paused=False)
+            assert len(cp.calls_for("SetChargingProfile")) == mandati + 1
+
+            # Una volta sola per spina, non a ogni ciclo.
+            await act.async_apply(14, paused=False)
+            assert len(cp.calls_for("SetChargingProfile")) == mandati + 1

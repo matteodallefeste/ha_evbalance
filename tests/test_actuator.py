@@ -175,6 +175,15 @@ class FakeSession:
         self.snapshot = MeterSnapshot()
         self.status = "Charging"
         self.vehicle_connected = True
+        self.reassert_pending = False
+        self.verifications = 0
+
+    def verify_limit(self):
+        self.verifications += 1
+
+    def consume_reassert(self):
+        pending, self.reassert_pending = self.reassert_pending, False
+        return pending
 
     async def async_set_limit(self, amps, phases=None):
         self.limits.append(amps)
@@ -263,6 +272,31 @@ async def test_un_rifiuto_fa_ritentare_al_giro_dopo():
     await act.async_apply(10, paused=False)
     await act.async_apply(10, paused=False)
     assert session.limits == [10.0, 10.0]
+
+
+@pytest.mark.asyncio
+async def test_auto_inserita_riaffonda_il_limite_una_volta_sola():
+    """Stesso valore di prima, ma la wallbox ha perso il profilo alla spina."""
+    session = FakeSession()
+    act = make_ocpp_actuator(session)
+    await act.async_apply(10, paused=False)
+
+    session.reassert_pending = True
+    await act.async_apply(10, paused=False)
+    assert session.limits == [10.0, 10.0]
+
+    await act.async_apply(10, paused=False)   # il flag e' stato consumato
+    assert session.limits == [10.0, 10.0]
+
+
+@pytest.mark.asyncio
+async def test_rivaluta_il_limite_a_ogni_ciclo():
+    """Una wallbox ferma non manda MeterValues: il controllo non puo' dipendere da loro."""
+    session = FakeSession()
+    act = make_ocpp_actuator(session)
+    await act.async_apply(10, paused=False)
+    await act.async_apply(10, paused=False)
+    assert session.verifications == 2
 
 
 @pytest.mark.asyncio

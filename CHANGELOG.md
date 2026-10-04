@@ -10,6 +10,23 @@ users.
 
 ## [Unreleased]
 
+### Fixed
+- OCPP mode: charging could fail to start when the car was plugged in, and only
+  began after restarting Home Assistant. The integration sent the current limit
+  and then only repeated it when the value changed, but many chargers drop their
+  charging profile at the moment the car is plugged in — so the new session had
+  no limit and nothing re-sent it until a restart reset the "already sent"
+  bookkeeping. The limit is now re-asserted once whenever a car is plugged in.
+- Completes the 26.9.3 fix for a charger that stays suspended after being asked
+  to resume: that check only ran when the charger sent current measurements, and
+  a charger that is not delivering sends none, so it never triggered in exactly
+  the case it was meant for. It now also works from the connector status alone,
+  is re-evaluated on every status change and every update cycle instead of only
+  when `MeterValues` arrive, and waits a few seconds after a new limit before
+  judging, so a normal pause-to-charge transition does not raise a false warning.
+- Connector status changes are now logged at info level (`Preparing -> Charging`
+  and so on), which makes this kind of problem diagnosable from the log.
+
 ## [26.9.4] - 2026-09-26
 
 ### Added

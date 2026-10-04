@@ -379,28 +379,33 @@ def check_limit_applied(
         )
 
     measured = snapshot.max_phase_current_a
-    if measured is None:
-        return LimitCheck(True, "nessuna misura disponibile: nessun sospetto")
 
     if limit_a <= 0:
+        if measured is None:
+            return LimitCheck(True, "nessuna misura disponibile: nessun sospetto")
         if measured > idle_current_a:
             return LimitCheck(
                 False, f"pausa chiesta ma la wallbox eroga ancora {measured:.1f}A"
             )
         return LimitCheck(True, "pausa confermata dalla corrente misurata")
 
-    if measured > limit_a + tolerance_a:
-        return LimitCheck(
-            False, f"chiesti {limit_a:.1f}A ma ne misuriamo {measured:.1f}"
-        )
-    if measured <= idle_current_a and status == STATUS_SUSPENDED_EVSE:
-        # La ripresa da 0 A e' proprio il caso che ci frega: la wallbox resta
-        # sospesa "di suo" (SuspendedEVSE) invece di ripartire col nuovo
-        # limite. SuspendedEV (l'auto che sceglie di non assorbire) resta
-        # invece un esito legittimo e non va segnalato come mismatch.
+    # La ripresa da 0 A e' proprio il caso che ci frega: la wallbox resta
+    # sospesa "di suo" (SuspendedEVSE) invece di ripartire col nuovo limite.
+    # Va riconosciuta anche senza misure: una wallbox che non eroga non manda
+    # correnti, e proprio per questo non c'e' altro modo di accorgersene.
+    # SuspendedEV (l'auto che sceglie di non assorbire) resta invece un esito
+    # legittimo e non va segnalato come mismatch.
+    if status == STATUS_SUSPENDED_EVSE and (measured is None or measured <= idle_current_a):
         return LimitCheck(
             False,
             f"chiesti {limit_a:.1f}A ma la wallbox resta sospesa (SuspendedEVSE)",
+        )
+
+    if measured is None:
+        return LimitCheck(True, "nessuna misura disponibile: nessun sospetto")
+    if measured > limit_a + tolerance_a:
+        return LimitCheck(
+            False, f"chiesti {limit_a:.1f}A ma ne misuriamo {measured:.1f}"
         )
     return LimitCheck(True, f"misurati {measured:.1f}A entro il limite")
 

@@ -217,6 +217,10 @@ class OcppActuator(ChargerActuator):
             self._last_sent = None   # alla riconnessione ripartiamo da capo
             return
 
+        # Una wallbox ferma non manda MeterValues: senza rivalutare qui a ogni
+        # ciclo, "sospesa nonostante il limite" non verrebbe mai notato.
+        session.verify_limit()
+
         limit = sanitize_limit(0 if paused else target_amps, self.min_current)
         now = time.monotonic()
 
@@ -224,8 +228,11 @@ class OcppActuator(ChargerActuator):
         # Se la wallbox non sta rispettando il limite, insistiamo: e' il caso
         # noto delle wallbox che, riprendendo da 0 A, ignorano il nuovo valore.
         unconfirmed = not session.limit_confirmed and (now - self._last_attempt) >= RETRY_INTERVAL
+        # Auto appena inserita: molte wallbox perdono il profilo in quel momento
+        # e un valore uguale al precedente non verrebbe piu' rimandato.
+        reassert = session.consume_reassert()
 
-        if not changed and not unconfirmed:
+        if not changed and not unconfirmed and not reassert:
             return
 
         if unconfirmed and not changed:
@@ -233,6 +240,10 @@ class OcppActuator(ChargerActuator):
                 "La wallbox non sta applicando il limite di %.0fA (%s): rimando il profilo",
                 limit,
                 session.last_limit_error,
+            )
+        elif reassert and not changed:
+            _LOGGER.info(
+                "Auto collegata: riaffermo il limite di %.0fA sulla wallbox", limit
             )
 
         self._last_attempt = now
