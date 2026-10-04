@@ -10,7 +10,7 @@ users.
 
 ## [Unreleased]
 
-## [26.9.5] - 2026-10-04
+## [26.10.1] - 2026-10-04
 
 ### Fixed
 - OCPP mode: charging could fail to start when the car was plugged in, and only
