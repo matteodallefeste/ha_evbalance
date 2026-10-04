@@ -10,6 +10,8 @@ users.
 
 ## [Unreleased]
 
+## [26.9.5] - 2026-10-04
+
 ### Fixed
 - OCPP mode: charging could fail to start when the car was plugged in, and only
   began after restarting Home Assistant. The integration sent the current limit
