@@ -177,9 +177,21 @@ class FakeSession:
         self.vehicle_connected = True
         self.reassert_pending = False
         self.verifications = 0
+        self.start_checks = 0
+        self.status_refreshes: list[bool] = []
+        self.armed: list[bool] = []
 
     def verify_limit(self):
         self.verifications += 1
+
+    def refresh_status_if_stale(self, force=False):
+        self.status_refreshes.append(force)
+
+    def arm_start(self, from_finishing=False):
+        self.armed.append(from_finishing)
+
+    async def async_ensure_transaction(self):
+        self.start_checks += 1
 
     def consume_reassert(self):
         pending, self.reassert_pending = self.reassert_pending, False
@@ -327,3 +339,41 @@ def test_potenza_zero_se_l_auto_non_e_collegata():
 def test_potenza_ignota_senza_wallbox():
     """None significa 'usa il sensore configurato', non 'zero watt'."""
     assert make_ocpp_actuator(None).read_power_w() is None
+
+
+@pytest.mark.asyncio
+async def test_con_la_ricarica_consentita_si_controlla_che_la_sessione_sia_aperta():
+    """Una wallbox in Preparing aspetta un'autorizzazione: il limite non basta."""
+    session = FakeSession()
+    act = make_ocpp_actuator(session)
+    await act.async_apply(10, paused=False)
+    assert session.start_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_in_pausa_non_si_apre_nessuna_sessione():
+    session = FakeSession()
+    act = make_ocpp_actuator(session)
+    await act.async_apply(10, paused=True)
+    await act.async_apply(4, paused=False)   # sotto il minimo: e' una pausa
+    assert session.start_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_lo_stato_viene_rinfrescato_a_ogni_ciclo_se_vecchio():
+    session = FakeSession()
+    await make_ocpp_actuator(session).async_apply(10, paused=False)
+    assert session.status_refreshes == [False]
+
+
+def test_ricarica_ora_arma_l_avvio_anche_da_finishing():
+    """Auto rimasta attaccata dopo una carica completa: e' l'utente a chiedere
+    di ripartire, quindi vale anche da Finishing, e lo stato va riletto."""
+    session = FakeSession()
+    make_ocpp_actuator(session).request_start()
+    assert session.armed == [True]
+    assert session.status_refreshes == [True]
+
+
+def test_ricarica_ora_senza_wallbox_non_solleva():
+    make_ocpp_actuator(None).request_start()

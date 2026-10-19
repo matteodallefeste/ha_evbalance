@@ -519,3 +519,107 @@ async def test_attuatore_riaffonda_il_limite_quando_si_inserisce_l_auto():
             # Una volta sola per spina, non a ogni ciclo.
             await act.async_apply(14, paused=False)
             assert len(cp.calls_for("SetChargingProfile")) == mandati + 1
+
+
+# --- sessione da aprire: l'auto attaccata resta in Preparing --------------
+
+@pytest.mark.asyncio
+async def test_alla_connessione_si_chiede_lo_stato_del_connettore():
+    """Una wallbox che si riconnette senza riavviarsi non manda lo stato finche'
+    non cambia: senza chiederlo l'auto risulterebbe scollegata."""
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            for _ in range(100):
+                if any(
+                    p.get("requestedMessage") == "StatusNotification"
+                    for p in cp.calls_for("TriggerMessage")
+                ):
+                    break
+                await asyncio.sleep(0.05)
+            else:
+                raise AssertionError("stato del connettore mai richiesto")
+
+
+@pytest.mark.asyncio
+async def test_auto_in_preparing_viene_avviata(monkeypatch):
+    """Il caso reale: cavo riattaccato, wallbox ferma in Preparing in attesa di
+    un'autorizzazione. Prima partiva solo riavviando Home Assistant."""
+    monkeypatch.setattr(ocpp_server, "REMOTE_START_DELAY", 0.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            cp.overrides["RemoteStartTransaction"] = {"status": "Accepted"}
+            session = csms.charge_point
+            await _status(cp, "Available")
+            await _status(cp, "Preparing")
+
+            await session.async_ensure_transaction()
+            start = await cp.wait_for("RemoteStartTransaction")
+            assert start == {"connectorId": 1, "idTag": "EVBALANCE"}
+
+            # Partita la transazione, non si insiste piu'.
+            await cp.call(
+                "StartTransaction",
+                {"connectorId": 1, "idTag": "EVBALANCE", "meterStart": 0,
+                 "timestamp": "2026-10-19T20:00:00Z"},
+            )
+            await session.async_ensure_transaction()
+            assert len(cp.calls_for("RemoteStartTransaction")) == 1
+
+
+@pytest.mark.asyncio
+async def test_non_si_passa_davanti_alla_wallbox_che_parte_da_sola():
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await _status(cp, "Preparing")
+            await session.async_ensure_transaction()   # appena arrivata
+            assert cp.calls_for("RemoteStartTransaction") == []
+
+
+@pytest.mark.asyncio
+async def test_avvio_rifiutato_si_ritenta_poche_volte(monkeypatch):
+    monkeypatch.setattr(ocpp_server, "REMOTE_START_DELAY", 0.0)
+    monkeypatch.setattr(ocpp_server, "REMOTE_START_RETRY", 0.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            cp.overrides["RemoteStartTransaction"] = {"status": "Rejected"}
+            session = csms.charge_point
+            await _status(cp, "Preparing")
+            for _ in range(ocpp_server.REMOTE_START_MAX_ATTEMPTS + 3):
+                await session.async_ensure_transaction()
+            assert (
+                len(cp.calls_for("RemoteStartTransaction"))
+                == ocpp_server.REMOTE_START_MAX_ATTEMPTS
+            )
+
+
+@pytest.mark.asyncio
+async def test_auto_carica_in_finishing_riparte_solo_se_richiesto(monkeypatch):
+    """Finishing = sessione chiusa dall'auto piena: ripartire da soli vorrebbe
+    dire riaprirla all'infinito. Lo si fa solo con "ricarica ora"."""
+    monkeypatch.setattr(ocpp_server, "REMOTE_START_DELAY", 0.0)
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            cp.overrides["RemoteStartTransaction"] = {"status": "Accepted"}
+            session = csms.charge_point
+            await _status(cp, "Finishing")
+            await session.async_ensure_transaction()
+            assert cp.calls_for("RemoteStartTransaction") == []
+
+            session.arm_start(from_finishing=True)
+            await session.async_ensure_transaction()
+            assert len(cp.calls_for("RemoteStartTransaction")) == 1
+
+
+@pytest.mark.asyncio
+async def test_le_fini_di_sessione_vengono_contate():
+    """"Ricarica ora" si spegne su una fine nuova, non su uno stato vecchio."""
+    async with running_csms() as csms:
+        async with connected(csms) as cp:
+            session = csms.charge_point
+            await _status(cp, "Finishing")       # stato ereditato: non conta
+            assert session.session_ends == 0
+            await _status(cp, "Preparing")
+            await _status(cp, "Charging")
+            await _status(cp, "Available")       # cavo staccato
+            assert session.session_ends == 1

@@ -10,6 +10,25 @@ users.
 
 ## [Unreleased]
 
+### Fixed
+- OCPP mode: after unplugging and re-plugging the car, charging could stay
+  stuck until Home Assistant was restarted — even with *Charge now* on. Many
+  chargers stop in `Preparing` when the cable goes in and wait for the session
+  to be authorized; a current limit alone does not start it, and the
+  integration never asked. It now sends `RemoteStartTransaction` when charging
+  is allowed, the car is connected and no session is open, after giving the
+  charger a few seconds to start on its own (up to three attempts per
+  plug-in).
+- *Charge now* switched itself off on the next update cycle when the last known
+  connector state was `Finishing` (left over from the previous, completed
+  charge) or a state that was never refreshed after a reconnection. It now
+  ends only on a session end observed after it was turned on, and turning it
+  on also restarts a session closed by a full car (`Finishing`).
+- The connector state is now requested from the charger when it connects and
+  every five minutes afterwards (`TriggerMessage StatusNotification`), instead
+  of waiting for the charger to report a change: chargers that reconnect
+  without rebooting often do not, which left a days-old state in memory.
+
 ## [26.10.1] - 2026-10-04
 
 ### Fixed

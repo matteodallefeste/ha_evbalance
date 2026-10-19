@@ -45,6 +45,9 @@ class ChargerActuator:
         """Potenza misurata dalla wallbox, o None se non la conosce."""
         return None
 
+    def request_start(self) -> None:
+        """L'utente vuole caricare adesso: se serve, si apra una sessione."""
+
     def diagnostics(self) -> dict[str, Any]:
         """Informazioni da esporre nelle entita' e nel pannello."""
         return {}
@@ -220,8 +223,16 @@ class OcppActuator(ChargerActuator):
         # Una wallbox ferma non manda MeterValues: senza rivalutare qui a ogni
         # ciclo, "sospesa nonostante il limite" non verrebbe mai notato.
         session.verify_limit()
+        session.refresh_status_if_stale()
 
         limit = sanitize_limit(0 if paused else target_amps, self.min_current)
+        await self._async_send_limit(session, limit)
+
+        # Prima il limite, poi l'avvio: la sessione nasce gia' entro il budget.
+        if limit > 0:
+            await session.async_ensure_transaction()
+
+    async def _async_send_limit(self, session, limit: float) -> None:
         now = time.monotonic()
 
         changed = self._last_sent is None or abs(limit - self._last_sent) > 0.05
@@ -251,6 +262,16 @@ class OcppActuator(ChargerActuator):
             self._last_sent = limit
         else:
             self._last_sent = None   # da ritentare al giro successivo
+
+    def request_start(self) -> None:
+        session = self.csms.charge_point
+        if session is None:
+            return
+        # Premuto "ricarica ora": vale anche da Finishing, cioe' dopo una
+        # sessione chiusa con l'auto rimasta attaccata. Lo stato che abbiamo
+        # potrebbe essere vecchio, quindi lo si richiede subito.
+        session.arm_start(from_finishing=True)
+        session.refresh_status_if_stale(force=True)
 
     def read_power_w(self) -> float | None:
         session = self.csms.charge_point

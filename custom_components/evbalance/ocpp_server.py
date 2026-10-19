@@ -30,18 +30,23 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import HomeAssistant, callback
 
 from .ocpp_messages import (
+    AWAITING_START_STATES,
     CALL,
     CALLERROR,
     CALLRESULT,
     CAPABILITY_KEYS,
     CONNECTED_STATES,
+    REMOTE_ID_TAG,
+    STATUS_FINISHING,
     MeterSnapshot,
     build_charging_profile,
     build_clear_profile,
+    build_remote_start,
     check_limit_applied,
     next_sampled_data,
     parse_configuration,
     parse_meter_values,
+    session_over,
     snapshot_without_flow,
     supports_phase_switching,
     supports_remote_trigger,
@@ -63,6 +68,16 @@ BOOT_SETTLE_SECONDS = 1.0
 # Dopo un nuovo limite lo stato del connettore ci mette qualche secondo a
 # seguirlo: prima di giudicarlo "sospeso nonostante il limite" si aspetta (s).
 STATUS_GRACE_SECONDS = 20.0
+# Ogni quanto richiedere lo stato del connettore (s). Molte wallbox lo mandano
+# solo quando cambia: se un messaggio si perde, o la connessione cade e si
+# riapre, senza chiederlo resteremmo per giorni con uno stato vecchio.
+STATUS_REFRESH_SECONDS = 300.0
+# Quanto lasciare alla wallbox per aprire la sessione da sola, prima di
+# chiederlo noi con RemoteStartTransaction (s).
+REMOTE_START_DELAY = 15.0
+# Pausa tra un tentativo di avvio e il successivo, e quanti farne (s).
+REMOTE_START_RETRY = 60.0
+REMOTE_START_MAX_ATTEMPTS = 3
 
 # Azioni che accettiamo dalla wallbox ma su cui non abbiamo nulla da dire.
 _ACK_ONLY = frozenset(
@@ -96,6 +111,11 @@ class ChargePointSession:
         self.transaction_start_wh: float | None = None
         self.id_tag: str | None = None
         self.connected_since: float = time.monotonic()
+        self.status_since: float = time.monotonic()
+        # Fini di sessione osservate (cavo staccato o transazione chiusa): chi
+        # deve accorgersi di una fine *successiva* a un certo momento confronta
+        # il contatore, invece di fidarsi dello stato, che puo' essere vecchio.
+        self.session_ends: int = 0
         self.last_message: float = time.monotonic()
 
         # --- stato dell'attuazione ---
@@ -106,6 +126,16 @@ class ChargePointSession:
         # succede quando l'auto viene inserita, perche' molte wallbox perdono il
         # profilo proprio in quel momento.
         self.reassert_pending: bool = False
+        # Apertura della sessione da parte nostra: armata quando arriva un'auto
+        # (o alla connessione, quando lo stato non si conosce ancora), disarmata
+        # appena una transazione parte. Da Finishing -- auto gia' carica, cavo
+        # ancora inserito -- si riparte solo su richiesta esplicita.
+        self.start_armed: bool = True
+        self.start_from_finishing: bool = False
+        self._start_attempts = 0
+        self._last_start_attempt: float | None = None
+        # La prima richiesta parte dalla connessione (vedi async_handle_ws).
+        self._last_status_request: float | None = time.monotonic()
         self._limit_set_at: float | None = None
         self._sampled_data: str | None = None
         self._tx_counter = 0
@@ -223,6 +253,89 @@ class ChargePointSession:
             "TriggerMessage",
             {"requestedMessage": "MeterValues", "connectorId": self.csms.connector},
         )
+
+    def arm_start(self, *, from_finishing: bool = False) -> None:
+        """Consente (di nuovo) di aprire la sessione se la wallbox non lo fa."""
+        self.start_armed = True
+        self.start_from_finishing = self.start_from_finishing or from_finishing
+        self._start_attempts = 0
+        self._last_start_attempt = None
+
+    async def async_ensure_transaction(self) -> None:
+        """Apre la sessione se l'auto e' collegata ma la wallbox resta in attesa.
+
+        Molte wallbox, all'inserimento del cavo, si fermano in Preparing finche'
+        qualcuno non autorizza la ricarica: un limite di corrente non basta, e
+        senza questo l'auto restava ferma fino a un riavvio di Home Assistant.
+        Va chiamata solo quando la ricarica e' consentita.
+        """
+        if not self.start_armed or self.transaction_id is not None:
+            return
+        if self.status not in AWAITING_START_STATES and not (
+            self.status == STATUS_FINISHING and self.start_from_finishing
+        ):
+            return
+        if self._start_attempts >= REMOTE_START_MAX_ATTEMPTS:
+            return
+        now = time.monotonic()
+        if now - self.status_since < REMOTE_START_DELAY:
+            return   # magari parte da sola: non le passiamo davanti
+        if (
+            self._last_start_attempt is not None
+            and now - self._last_start_attempt < REMOTE_START_RETRY
+        ):
+            return
+
+        self._start_attempts += 1
+        self._last_start_attempt = now
+        _LOGGER.info(
+            "%s: auto collegata ma nessuna sessione aperta (%s), la avvio "
+            "(tentativo %d di %d)",
+            self.cp_id,
+            self.status,
+            self._start_attempts,
+            REMOTE_START_MAX_ATTEMPTS,
+        )
+        result = await self.call(
+            "RemoteStartTransaction",
+            build_remote_start(self.csms.connector, self.id_tag or REMOTE_ID_TAG),
+        )
+        status = (result or {}).get("status")
+        if status != "Accepted":
+            # Rifiuto tipico: una transazione e' gia' aperta ma non la
+            # conosciamo (ad esempio dopo un riavvio di Home Assistant).
+            _LOGGER.warning(
+                "%s: avvio della sessione non accettato (%s)",
+                self.cp_id,
+                status or "nessuna risposta",
+            )
+
+    async def async_refresh_status(self) -> None:
+        """Chiede alla wallbox lo stato attuale del connettore."""
+        self._last_status_request = time.monotonic()
+        if not supports_remote_trigger(self.configuration):
+            return
+        await self.call(
+            "TriggerMessage",
+            {"requestedMessage": "StatusNotification", "connectorId": self.csms.connector},
+        )
+
+    async def _async_refresh_status_after_connect(self) -> None:
+        """Alla connessione lo stato e' ignoto: molte wallbox, riconnettendosi
+        senza riavviarsi, non lo mandano finche' non cambia qualcosa."""
+        await asyncio.sleep(BOOT_SETTLE_SECONDS)
+        await self.async_refresh_status()
+
+    def refresh_status_if_stale(self, *, force: bool = False) -> None:
+        """Rinfresca lo stato se e' da un po' che non lo chiediamo."""
+        if (
+            not force
+            and self._last_status_request is not None
+            and time.monotonic() - self._last_status_request < STATUS_REFRESH_SECONDS
+        ):
+            return
+        self._last_status_request = time.monotonic()
+        self.csms.hass.async_create_task(self.async_refresh_status())
 
     def consume_reassert(self) -> bool:
         """True (una volta sola) se il limite va riaffermato perche' e' arrivata un'auto."""
@@ -349,8 +462,16 @@ class ChargePointSession:
                 self.error_code = None if error in (None, "NoError") else str(error)
                 if self.status != previous:
                     _LOGGER.info("%s: stato %s -> %s", self.cp_id, previous, self.status)
+                    self.status_since = time.monotonic()
                     if previous not in CONNECTED_STATES and self.status in CONNECTED_STATES:
                         self.reassert_pending = True
+                        self.arm_start()
+                    if (
+                        previous in CONNECTED_STATES
+                        and previous != STATUS_FINISHING
+                        and session_over(self.status)
+                    ):
+                        self.session_ends += 1
                     # Un cambio di stato e' un'informazione nuova anche se la
                     # wallbox non manda MeterValues (ferma, non ne manda).
                     self.verify_limit()
@@ -365,6 +486,8 @@ class ChargePointSession:
             self._tx_counter += 1
             self.transaction_id = self._tx_counter
             self.id_tag = payload.get("idTag")
+            self.start_armed = False
+            self.start_from_finishing = False
             meter_start = payload.get("meterStart")
             self.transaction_start_wh = (
                 float(meter_start) if meter_start is not None else None
@@ -398,6 +521,7 @@ class ChargePointSession:
             self.snapshot = snapshot_without_flow(self.snapshot)
             self.transaction_id = None
             self.transaction_start_wh = None
+            self.session_ends += 1
             return {"idTagInfo": {"status": "Accepted"}}
 
         if action == "Authorize":
@@ -701,6 +825,7 @@ class OcppCsms:
                 pass
         self._sessions[cp_id] = session
         self.notify_update()
+        self.hass.async_create_task(session._async_refresh_status_after_connect())
 
         try:
             await session.run()

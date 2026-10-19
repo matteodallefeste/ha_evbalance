@@ -61,7 +61,7 @@ from .const import (
     MODE_OCPP,
 )
 from .energy import TariffScheme, active_band, band_allowed
-from .ocpp_messages import STATUS_SUSPENDED_EV, session_over
+from .ocpp_messages import STATUS_SUSPENDED_EV
 from .tariff_loader import holidays_for_scheme, resolve_scheme
 
 _LOGGER = logging.getLogger(__name__)
@@ -105,6 +105,10 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         # non c'e' piu'.
         self.charge_now = False
         self._charge_now_idle_since: float | None = None
+        # Fine sessione da cui "ricarica ora" si spegne: solo una fine
+        # osservata *dopo* l'attivazione, non lo stato che c'era gia'.
+        self._charge_now_session = None
+        self._charge_now_ends = 0
         self._last_ts: float | None = None
         self.csms = csms
         self.actuator: ChargerActuator = self._build_actuator()
@@ -207,13 +211,25 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         smettendo di assorbire (``SuspendedEV``) per un tempo che escluda una
         pausa di passaggio. Se la wallbox non e' collegata non si sa nulla e si
         aspetta: una disconnessione non deve annullare la scelta dell'utente.
+
+        Conta solo una fine avvenuta dopo l'attivazione. Lo stato da solo non
+        basta: un ``Finishing`` rimasto dalla carica precedente, o uno stato
+        mai aggiornato dopo una riconnessione, spegnevano il bottone al primo
+        ciclo, senza che la ricarica potesse partire.
         """
         session = self.csms.charge_point if self.csms is not None else None
         if session is None:
             self._charge_now_idle_since = None
             return False
 
-        if session_over(session.status):
+        if session is not self._charge_now_session:
+            # Wallbox riconnessa: il contatore riparte, si riparte da qui.
+            self._charge_now_session = session
+            self._charge_now_ends = session.session_ends
+            self._charge_now_idle_since = None
+            return False
+
+        if session.session_ends != self._charge_now_ends:
             return True
 
         if session.status != STATUS_SUSPENDED_EV:
@@ -318,6 +334,11 @@ class EVBalanceCoordinator(DataUpdateCoordinator[dict]):
         """Avvia (o annulla) la ricarica fuori fascia (chiamato dallo switch)."""
         self.charge_now = enabled
         self._charge_now_idle_since = None
+        session = self.csms.charge_point if self.csms is not None else None
+        self._charge_now_session = session
+        self._charge_now_ends = session.session_ends if session is not None else 0
+        if enabled:
+            self.actuator.request_start()
         await self.async_request_refresh()
 
     async def async_set_balancing(self, enabled: bool) -> None:

@@ -38,6 +38,16 @@ CONNECTED_STATES = frozenset(
     }
 )
 
+# Stati in cui l'auto e' collegata ma la sessione puo' non essere ancora
+# aperta: la wallbox aspetta un'autorizzazione (tessera o RemoteStartTransaction)
+# e un limite di corrente, da solo, non la fa partire.
+AWAITING_START_STATES = frozenset(
+    {STATUS_PREPARING, STATUS_SUSPENDED_EV, STATUS_SUSPENDED_EVSE}
+)
+
+# idTag con cui l'integrazione apre le sessioni (max 20 caratteri per l'OCPP).
+REMOTE_ID_TAG = "EVBALANCE"
+
 # Measurand che ci interessano nei MeterValues. Quando il campo manca, l'OCPP
 # 1.6 dice di assumere Energy.Active.Import.Register.
 DEFAULT_MEASURAND = "Energy.Active.Import.Register"
@@ -127,6 +137,11 @@ def build_charging_profile(
         profile["transactionId"] = transaction_id
 
     return {"connectorId": connector, "csChargingProfiles": profile}
+
+
+def build_remote_start(connector: int, id_tag: str = REMOTE_ID_TAG) -> dict:
+    """Payload di RemoteStartTransaction: apre una sessione sul connettore."""
+    return {"connectorId": connector, "idTag": id_tag}
 
 
 def build_clear_profile(profile_id: int | None = None, connector: int | None = None) -> dict:
