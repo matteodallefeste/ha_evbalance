@@ -10,6 +10,8 @@ users.
 
 ## [Unreleased]
 
+## [26.10.2] - 2026-10-19
+
 ### Fixed
 - OCPP mode: after unplugging and re-plugging the car, charging could stay
   stuck until Home Assistant was restarted — even with *Charge now* on. Many
